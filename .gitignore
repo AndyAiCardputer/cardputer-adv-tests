@@ -1,0 +1,32 @@
+# Build artifacts
+build/
+.pio/
+*.bin
+*.elf
+*.hex
+
+# Arduino IDE
+*.ino.bak
+*.ino.local
+
+# Libraries
+libdeps/
+lib/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Backups
+*_backup/
+*.zip
+
