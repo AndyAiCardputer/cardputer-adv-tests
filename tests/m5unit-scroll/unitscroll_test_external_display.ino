@@ -1,15 +1,15 @@
 /*
- * Тест M5Unit-Scroll для Cardputer-Adv на внешнем дисплее ILI9488
+ * M5Unit-Scroll Test for Cardputer-Adv with External ILI9488 Display
  * 
- * M5Unit-Scroll - это энкодер/скроллер от M5Stack
+ * M5Unit-Scroll is an encoder/scroll unit from M5Stack
  * 
- * Характеристики (из официального протокола I2C):
- * - I2C интерфейс (адрес 0x40)
- * - Ротационный энкодер (вращение влево/вправо)
- * - Кнопка нажатия
- * - RGB LED индикация
+ * Specifications (from official I2C protocol):
+ * - I2C interface (address 0x40)
+ * - Rotary encoder (left/right rotation)
+ * - Push button
+ * - RGB LED indicator
  * 
- * Регистры I2C:
+ * I2C Registers:
  * - 0x10: Encoder value (16-bit, little-endian)
  * - 0x20: Button status (0 or 1)
  * - 0x30: RGB LED control (R, G, B)
@@ -17,7 +17,7 @@
  * - 0x50: Incremental encoder (16-bit, resets after read!)
  * - 0xF0: Info register (Bootloader/FW version, I2C addr)
  * 
- * Подключение ILI9488 через EXT 2.54-14P:
+ * ILI9488 Connection via EXT 2.54-14P:
  * - VCC  -> PIN 2 (5VIN)
  * - GND  -> PIN 4 (GND)
  * - SCK  -> PIN 7 (GPIO 40)
@@ -27,15 +27,15 @@
  * - DC   -> PIN 5 (GPIO 6, BUSY)
  * - RST  -> PIN 1 (GPIO 3)
  * 
- * Подключение M5Unit-Scroll:
+ * M5Unit-Scroll Connection:
  * - PORT.A (Grove HY2.0-4P)
  * - SDA -> GPIO 2 (G2)
  * - SCL -> GPIO 1 (G1)
  * - GND -> GND
  * - 5V -> 5V
  * 
- * Примечание: Если модуль использует другой интерфейс (UART, SPI),
- * код нужно будет адаптировать после проверки документации.
+ * Note: If the module uses a different interface (UART, SPI),
+ * the code will need to be adapted after checking the documentation.
  */
 
 #include <M5Cardputer.h>
@@ -44,7 +44,7 @@
 #include "lgfx/v1/panel/Panel_LCD.hpp"
 
 // ============================================
-// Локальное определение Panel_ILI9488
+// Local Panel_ILI9488 Definition
 // ============================================
 
 struct Panel_ILI9488_Local : public lgfx::v1::Panel_LCD {
@@ -94,7 +94,7 @@ protected:
 };
 
 // ============================================
-// Конфигурация внешнего дисплея ILI9488
+// External ILI9488 Display Configuration
 // ============================================
 
 class LGFX_ILI9488 : public lgfx::v1::LGFX_Device {
@@ -105,13 +105,13 @@ public:
     LGFX_ILI9488() {
         // --- SPI bus ---
         auto b = bus.config();
-        b.spi_host   = SPI3_HOST;   // HSPI на ESP32-S3
+        b.spi_host   = SPI3_HOST;   // HSPI on ESP32-S3
         b.spi_mode   = 0;
-        b.freq_write = 20000000;    // 20 МГц
+        b.freq_write = 20000000;    // 20 MHz
         b.freq_read  = 16000000;
         b.spi_3wire  = true;        // 3-wire SPI
-        b.use_lock   = false;       // Без блокировки SPI
-        b.dma_channel = 0;          // Без DMA
+        b.use_lock   = false;       // No SPI lock
+        b.dma_channel = 0;          // No DMA
 
         b.pin_sclk = 40;            // SCK  -> PIN 7
         b.pin_mosi = 14;            // MOSI -> PIN 9
@@ -125,7 +125,7 @@ public:
         auto p = panel.config();
         p.pin_cs    = 5;            // CS   -> PIN 13
         p.pin_rst   = 3;            // RST  -> PIN 1
-        p.bus_shared = false;       // Не делим шину с SD
+        p.bus_shared = false;       // Not shared with SD
         p.invert     = false;
         p.rgb_order  = false;
         p.dlen_16bit = false;
@@ -145,18 +145,18 @@ public:
     }
 };
 
-LGFX_ILI9488 lcd;  // Внешний дисплей ILI9488
+LGFX_ILI9488 lcd;  // External ILI9488 display
 
 // ============================================
-// I2C настройки
+// I2C Settings
 // ============================================
-#define UNIT_SCROLL_I2C_ADDRESS 0x40  // Официальный адрес из протокола I2C
+#define UNIT_SCROLL_I2C_ADDRESS 0x40  // Official address from I2C protocol
 
-// Используем Wire для PORT.A (GPIO 2/1) - общий I2C контроллер с клавиатурой
+// Use Wire for PORT.A (GPIO 2/1) - shared I2C controller with keyboard
 #define I2C_SDA_PIN 2  // GPIO 2 (G2)
 #define I2C_SCL_PIN 1  // GPIO 1 (G1)
 
-// Регистры из официального протокола I2C (M5Stack Unit Scroll Protocol)
+// Registers from official I2C protocol (M5Stack Unit Scroll Protocol)
 #define SCROLL_ENCODER_REG     0x10  // Encoder value (16-bit, little-endian: byte0 + byte1*256)
 #define SCROLL_BUTTON_REG      0x20  // Button status (R: 0 or 1)
 #define SCROLL_RGB_REG         0x30  // RGB LED control (W/R: NULL, R, G, B)
@@ -171,45 +171,45 @@ bool moduleFound = false;
 uint8_t foundAddress = 0;
 
 // ============================================
-// Состояние экрана скролла
+// Scroll Screen State
 // ============================================
-bool showScrollTest = false;  // Флаг отображения тестового экрана скролла
-unsigned long screenSwitchTime = 0;  // Время последнего переключения экрана
-const int SCREEN_SWITCH_DELAY = 500;  // Пауза после переключения экрана перед чтением I2C (мс)
-const int MAX_LIST_ITEMS = 20;  // Максимум элементов в списке
+bool showScrollTest = false;  // Flag to show scroll test screen
+unsigned long screenSwitchTime = 0;  // Last screen switch time
+const int SCREEN_SWITCH_DELAY = 500;  // Delay after screen switch before I2C read (ms)
+const int MAX_LIST_ITEMS = 20;  // Maximum items in list
 String listItems[MAX_LIST_ITEMS] = {
     "Item 1", "Item 2", "Item 3", "Item 4", "Item 5",
     "Item 6", "Item 7", "Item 8", "Item 9", "Item 10",
     "Item 11", "Item 12", "Item 13", "Item 14", "Item 15",
     "Item 16", "Item 17", "Item 18", "Item 19", "Item 20"
 };
-bool listItemsChecked[MAX_LIST_ITEMS] = {false};  // Флаги пометки
-int listItemCount = MAX_LIST_ITEMS;  // Количество элементов
-int selectedListItem = 0;  // Выбранный элемент (0-based)
-int lastScrollNavTime = 0;  // Время последней навигации (debounce)
-const int SCROLL_NAV_DEBOUNCE = 150;  // Debounce для навигации (мс)
-unsigned long lastScrollReadTime = 0;  // Время последнего чтения энкодера
-const int SCROLL_READ_INTERVAL = 50;  // Интервал чтения энкодера (мс) - не читать слишком часто
-int i2cErrorCount = 0;  // Счетчик ошибок I2C
-const int MAX_I2C_ERRORS = 10;  // Максимум ошибок подряд перед пропуском чтений (увеличено)
+bool listItemsChecked[MAX_LIST_ITEMS] = {false};  // Check flags
+int listItemCount = MAX_LIST_ITEMS;  // Number of items
+int selectedListItem = 0;  // Selected item (0-based)
+int lastScrollNavTime = 0;  // Last navigation time (debounce)
+const int SCROLL_NAV_DEBOUNCE = 150;  // Navigation debounce (ms)
+unsigned long lastScrollReadTime = 0;  // Last encoder read time
+const int SCROLL_READ_INTERVAL = 50;  // Encoder read interval (ms) - don't read too often
+int i2cErrorCount = 0;  // I2C error counter
+const int MAX_I2C_ERRORS = 10;  // Maximum consecutive errors before skipping reads (increased)
 
 // ============================================
-// Состояние для оптимизации отрисовки скролла
+// State for scroll rendering optimization
 // ============================================
-bool scrollScreenInitialized = false;  // Флаг первой инициализации экрана
-int lastFirstVisible = -1;  // Последний первый видимый элемент (для оптимизации)
+bool scrollScreenInitialized = false;  // First screen initialization flag
+int lastFirstVisible = -1;  // Last first visible item (for optimization)
 
 // ============================================
-// Мягкий ресет I2C-шины
+// Soft I2C Bus Reset
 // ============================================
 void i2cBusReset() {
     Serial.println(">>> I2C Bus Reset: Recovering from errors...");
     
-    // Останавливаем общий I2C
+    // Stop shared I2C
     Wire.end();
     delay(50);
     
-    // Дёргаем SCL 9 раз, чтобы освободить зависшего slave
+    // Toggle SCL 9 times to release stuck slave
     pinMode(I2C_SCL_PIN, OUTPUT);
     for (int i = 0; i < 9; i++) {
         digitalWrite(I2C_SCL_PIN, HIGH);
@@ -218,13 +218,13 @@ void i2cBusReset() {
         delayMicroseconds(5);
     }
     
-    // Возвращаем ноги в "I2C-стиль"
+    // Return pins to "I2C mode"
     pinMode(I2C_SCL_PIN, INPUT_PULLUP);
     pinMode(I2C_SDA_PIN, INPUT_PULLUP);
     delay(50);
     
-    // Переинициализация Wire на порт A
-    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, 50000);  // 50 kHz для STM32F030
+    // Reinitialize Wire on port A
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, 50000);  // 50 kHz for STM32F030
     Wire.setTimeOut(100);
     
     Serial.println(">>> I2C Bus Reset: Complete");
@@ -244,18 +244,18 @@ void setup() {
     Serial.println("Actual I2C address and registers may differ!");
     Serial.println("Check M5Unit-Scroll documentation.");
     
-    // Инициализация внешнего ILI9488
+    // Initialize external ILI9488
     Serial.println("\nInitializing ILI9488 display...");
     
     if (lcd.init()) {
         Serial.println("  ✓ ILI9488 initialized successfully!");
         Serial.printf("  ✓ Display size: %dx%d\n", lcd.width(), lcd.height());
         
-        lcd.setRotation(3);  // 180 градусов
+        lcd.setRotation(3);  // 180 degrees
         lcd.setColorDepth(24);
         
         lcd.fillScreen(TFT_BLACK);
-        lcd.setTextSize(2);  // Больший размер шрифта для большого экрана
+        lcd.setTextSize(2);  // Larger font size for large screen
         lcd.setTextColor(TFT_WHITE, TFT_BLACK);
         
         Serial.println("\nReady! Display initialized...");
@@ -270,26 +270,26 @@ void setup() {
         return;
     }
     
-    // Инициализация Cardputer ПОСЛЕ дисплея
+    // Initialize Cardputer AFTER display
     M5Cardputer.begin(true);
     delay(200);
     
-    // Отключаем подсветку встроенного дисплея
+    // Disable built-in display backlight
     M5.Display.setBrightness(0);
     Serial.println("  ✓ Built-in display backlight: DISABLED");
     
-    // Инициализация I2C на PORT.A
+    // Initialize I2C on PORT.A
     Serial.println("\nInitializing I2C...");
     Serial.println("Using PORT.A (GPIO 2/1)");
     Serial.println("CRITICAL: Using Wire (shared with keyboard) instead of Wire1");
     
-    // ВАЖНО: STM32F030 использует pull-up резисторы, ESP32 тоже должен их включить
+    // IMPORTANT: STM32F030 uses pull-up resistors, ESP32 must enable them too
     pinMode(I2C_SDA_PIN, INPUT_PULLUP);
     pinMode(I2C_SCL_PIN, INPUT_PULLUP);
-    delay(100);  // Даем время на стабилизацию pull-up
+    delay(100);  // Give time for pull-up stabilization
     
-    // ИСПРАВЛЕНИЕ: Используем Wire вместо Wire1 (общий контроллер)
-    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, 50000);  // 50 kHz для STM32F030
+    // FIX: Use Wire instead of Wire1 (shared controller)
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, 50000);  // 50 kHz for STM32F030
     Wire.setTimeOut(100);
     
     Serial.printf("  SDA: GPIO %d (G2)\n", I2C_SDA_PIN);
@@ -298,11 +298,11 @@ void setup() {
     Serial.printf("  Speed: 50 kHz\n");
     Serial.printf("  Clock stretching: Enabled\n");
     
-    // STM32F030 может требовать больше времени на инициализацию после включения питания
+    // STM32F030 may require more initialization time after power-on
     Serial.println("\nWaiting for STM32F030 initialization...");
-    delay(1000);  // Увеличена задержка для STM32F030
+    delay(1000);  // Increased delay for STM32F030
     
-    // Сканирование I2C шины для поиска модуля
+    // Scan I2C bus for module
     Serial.println("\nScanning I2C bus for Scroll module...");
     Serial.println("STM32F030 I2C slave - trying multiple detection methods");
     Serial.println("(Trying addresses: 0x40, 0x5E, 0x5F, 0x41, 0x42)");
@@ -311,7 +311,7 @@ void setup() {
     bool found = false;
     uint8_t foundAddress = 0;
     
-    // Метод 1: Стандартное сканирование
+    // Method 1: Standard scan
     Serial.println("\nMethod 1: Standard I2C scan");
     for (int i = 0; i < 5; i++) {
         Wire.beginTransmission(addresses[i]);
@@ -324,10 +324,10 @@ void setup() {
             moduleFound = true;
             break;
         }
-        delay(50);  // Увеличена задержка между попытками для STM32F030
+        delay(50);  // Increased delay between attempts for STM32F030
     }
     
-    // Метод 2: Прямое чтение регистров (STM32F030 может не отвечать на beginTransmission)
+    // Method 2: Direct register read (STM32F030 may not respond to beginTransmission)
     if (!found) {
         Serial.println("\nMethod 2: Direct register read (STM32F030 I2C slave mode)");
         Serial.println("Trying to read register 0x20 (Button register)...");
@@ -335,10 +335,10 @@ void setup() {
         for (int attempt = 0; attempt < 3; attempt++) {
             Wire.beginTransmission(UNIT_SCROLL_I2C_ADDRESS);
             Wire.write(SCROLL_BUTTON_REG);  // 0x20
-            byte error = Wire.endTransmission(false);  // false = repeated start (важно для STM32F030)
+            byte error = Wire.endTransmission(false);  // false = repeated start (important for STM32F030)
             
             if (error == 0) {
-                delayMicroseconds(1000);  // Увеличена задержка для STM32F030
+                delayMicroseconds(1000);  // Increased delay for STM32F030
                 uint8_t bytesReceived = Wire.requestFrom(UNIT_SCROLL_I2C_ADDRESS, 1, true);
                 
                 if (bytesReceived > 0 && Wire.available()) {
@@ -351,11 +351,11 @@ void setup() {
                     break;
                 }
             }
-            delay(200);  // Задержка между попытками
+            delay(200);  // Delay between attempts
         }
     }
     
-    // Метод 3: Попробовать разные скорости I2C (STM32F030 может требовать другую скорость)
+    // Method 3: Try different I2C speeds (STM32F030 may require different speed)
     if (!found) {
         Serial.println("\nMethod 3: Trying different I2C speeds");
         uint32_t speeds[] = {50000, 100000, 200000};  // 50kHz, 100kHz, 200kHz
@@ -381,7 +381,7 @@ void setup() {
             delay(100);
         }
         
-        // Возвращаемся к стандартной скорости
+        // Return to standard speed
         if (!found) {
             Wire.end();
             delay(100);
@@ -410,7 +410,7 @@ void setup() {
         Serial.println("     - Module may need firmware update");
         Serial.println("     - Check if module LED blinks (bootloader mode)");
         
-        // Отображение ошибки на дисплее
+        // Display error on screen
         lcd.fillScreen(TFT_BLACK);
         lcd.setCursor(10, 10);
         lcd.setTextColor(TFT_RED, TFT_BLACK);
@@ -426,16 +426,16 @@ void setup() {
         lcd.setCursor(10, 190);
         lcd.println("2. Pull-up resistors");
     } else {
-        // Модуль найден - устанавливаем флаг
+        // Module found - set flag
         moduleFound = true;
         
-        // Пробуем прочитать информацию о модуле
+        // Try to read module information
         Serial.println("\n✓ Module found! Testing communication...");
         
-        // Сначала пробуем прочитать I2C адрес (регистр 0xFF из прошивки)
-        // Из прошивки: при чтении 0xFF модуль возвращает свой I2C адрес
+        // First try to read I2C address (register 0xFF from firmware)
+        // From firmware: reading 0xFF returns module's I2C address
         Wire.beginTransmission(foundAddress);
-        Wire.write(0xFF);  // Команда чтения I2C адреса
+        Wire.write(0xFF);  // I2C address read command
         Wire.endTransmission(false);
         delayMicroseconds(200);
         
@@ -447,7 +447,7 @@ void setup() {
             Serial.println("  ⚠️ Module found but does not respond to commands");
             Serial.println("  Trying direct register read...");
             
-            // Пробуем прочитать кнопку напрямую (регистр 0x20)
+            // Try to read button directly (register 0x20)
             Wire.beginTransmission(foundAddress);
             Wire.write(0x20);  // Button register
             Wire.endTransmission(false);
@@ -466,7 +466,7 @@ void setup() {
             }
         }
         
-        // Отображение успешного подключения
+        // Display successful connection
         lcd.fillScreen(TFT_BLACK);
         lcd.setCursor(10, 10);
         lcd.setTextColor(TFT_CYAN, TFT_BLACK);
@@ -494,17 +494,17 @@ void setup() {
     Serial.println();
 }
 
-// Улучшенная функция чтения регистра с обработкой ошибок
+// Improved register read function with error handling
 bool readScrollRegister(uint8_t reg, uint8_t length, uint8_t* data) {
-    // Проверяем что модуль найден
+    // Check if module is found
     if (!moduleFound) {
         return false;
     }
     
-    // Используем найденный адрес, если он установлен, иначе константу
+    // Use found address if set, otherwise constant
     uint8_t address = (foundAddress != 0) ? foundAddress : UNIT_SCROLL_I2C_ADDRESS;
     
-    // Отправляем адрес регистра
+    // Send register address
     Wire.beginTransmission(address);
     Wire.write(reg);
     byte error = Wire.endTransmission(false);  // false = не останавливать шину (repeated start)
@@ -514,10 +514,10 @@ bool readScrollRegister(uint8_t reg, uint8_t length, uint8_t* data) {
         return false;
     }
     
-    // Задержка для STM32F030 перед чтением (уменьшена для стабильности)
-    delayMicroseconds(500);  // Оптимальная задержка для STM32F030
+    // Delay for STM32F030 before read (reduced for stability)
+    delayMicroseconds(500);  // Optimal delay for STM32F030
     
-    // Запрашиваем данные
+    // Request data
     uint8_t bytesReceived = Wire.requestFrom(address, length, true);
     
     if (bytesReceived == 0) {
@@ -525,10 +525,10 @@ bool readScrollRegister(uint8_t reg, uint8_t length, uint8_t* data) {
         return false;
     }
     
-    // Небольшая задержка после requestFrom для STM32F030
+    // Small delay after requestFrom for STM32F030
     delayMicroseconds(300);
     
-    // Читаем данные (максимум 16 байт для info register)
+    // Read data (max 16 bytes for info register)
     for (int i = 0; i < length && i < 16; i++) {
         if (Wire.available()) {
             data[i] = Wire.read();
@@ -538,17 +538,17 @@ bool readScrollRegister(uint8_t reg, uint8_t length, uint8_t* data) {
         }
     }
     
-    // Успешное чтение - обнуляем счетчик ошибок
+    // Successful read - reset error counter
     i2cErrorCount = 0;
     return true;
 }
 
-// Обертка для обратной совместимости
+// Wrapper for backward compatibility
 int readScrollRegisterValue(uint8_t reg, uint8_t length) {
     uint8_t data[4] = {0};
     
     if (!readScrollRegister(reg, length, data)) {
-        // Ошибка чтения - возвращаем последнее известное значение
+        // Read error - return last known value
         if (length == 2) {
             return lastEncoderValue;
         } else {
@@ -566,28 +566,28 @@ int readScrollRegisterValue(uint8_t reg, uint8_t length) {
 }
 
 // ============================================
-// Функция для управления RGB LED
+// Function to control RGB LED
 // ============================================
-// color: формат 0xRRGGBB (например, 0xFF0000 = красный, 0x00FF00 = зеленый, 0x0000FF = синий)
-// Из прошивки: neopixel_set_color() ожидает R в байт 8-15, G в байт 16-23, B в байт 24-31
-// Значит записываем: 0x31 = R, 0x32 = G, 0x33 = B
+// color: format 0xRRGGBB (e.g., 0xFF0000 = red, 0x00FF00 = green, 0x0000FF = blue)
+// From firmware: neopixel_set_color() expects R in byte 8-15, G in byte 16-23, B in byte 24-31
+// So write: 0x31 = R, 0x32 = G, 0x33 = B
 void setScrollLEDFast(uint32_t color) {
     if (!moduleFound) {
         return;
     }
     
-    // Используем найденный адрес, если он установлен, иначе константу
+    // Use found address if set, otherwise constant
     uint8_t address = (foundAddress != 0) ? foundAddress : UNIT_SCROLL_I2C_ADDRESS;
     
-    // Извлекаем RGB из формата 0xRRGGBB
-    uint8_t r = (color >> 16) & 0xFF;  // Красный
-    uint8_t g = (color >> 8) & 0xFF;   // Зеленый
-    uint8_t b = color & 0xFF;          // Синий
+    // Extract RGB from 0xRRGGBB format
+    uint8_t r = (color >> 16) & 0xFF;  // Red
+    uint8_t g = (color >> 8) & 0xFF;   // Green
+    uint8_t b = color & 0xFF;          // Blue
     
-    // Записываем R, G, B в регистры 0x31, 0x32, 0x33
+    // Write R, G, B to registers 0x31, 0x32, 0x33
     // neopixel_set_color() ожидает: байт 8-15 = R, байт 16-23 = G, байт 24-31 = B
     Wire.beginTransmission(address);
-    Wire.write(0x31);  // Начальный регистр для R
+    Wire.write(0x31);  // Start register for R
     Wire.write(r);     // R → байт 8-15 буфера
     Wire.write(g);     // G → байт 16-23 буфера
     Wire.write(b);     // B → байт 24-31 буфера
@@ -602,19 +602,19 @@ void setScrollLEDFast(uint32_t color) {
 }
 
 // ============================================
-// Функция отрисовки тестового экрана скролла (ОПТИМИЗИРОВАННАЯ)
+// Scroll test screen rendering function (OPTIMIZED)
 // ============================================
-// Стиль как в эмуляторе ZX Spectrum
-// Использует частичные обновления для устранения мерцания
+// Style like ZX Spectrum emulator
+// Uses partial updates to eliminate flickering
 void drawScrollTest() {
-    // Вычисляем первый видимый элемент (скроллинг)
+    // Calculate first visible item (scrolling)
     int firstVisible = selectedListItem - 3;
     if (firstVisible < 0) firstVisible = 0;
     
-    // Группируем все операции SPI для устранения мерцания
+    // Group all SPI operations to eliminate flickering
     lcd.startWrite();
     
-    // Перерисовываем статические элементы только при первой инициализации
+    // Redraw static elements only on first initialization
     if (!scrollScreenInitialized) {
         // ═══ ЗАГОЛОВОК ═══
         lcd.setTextSize(2);
@@ -631,73 +631,73 @@ void drawScrollTest() {
         scrollScreenInitialized = true;
     }
     
-    // Обновляем счетчик (справа) - всегда
-    lcd.fillRect(360, 10, 120, 20, TFT_BLACK);  // Очищаем область счетчика
+    // Update counter (right) - always
+    lcd.fillRect(360, 10, 120, 20, TFT_BLACK);  // Clear counter area
     lcd.setTextSize(2);
     lcd.setTextColor(TFT_CYAN, TFT_BLACK);
     lcd.setCursor(360, 10);
     lcd.printf("%d/%d", selectedListItem + 1, listItemCount);
     
-    // Перерисовываем рамку ВСЕГДА (чтобы она не пропадала)
+    // Redraw frame ALWAYS (so it doesn't disappear)
     lcd.drawRect(20, 40, 440, 190, TFT_WHITE);
     
-    // Очищаем область списка с запасом для устранения артефактов
-    // Очищаем всю внутреннюю область рамки (с отступом 2px от краев рамки)
-    // Это гарантирует удаление всех артефактов от предыдущих отрисовок
-    lcd.fillRect(22, 42, 436, 186, TFT_BLACK);  // Внутри рамки с отступом 2px
+    // Clear list area with margin to eliminate artifacts
+    // Clear entire inner frame area (with 2px margin from frame edges)
+    // This ensures removal of all artifacts from previous renders
+    lcd.fillRect(22, 42, 436, 186, TFT_BLACK);  // Inside frame with 2px margin
     
-    // Обновляем lastFirstVisible для отслеживания изменений
+    // Update lastFirstVisible to track changes
     if (firstVisible != lastFirstVisible) {
         lastFirstVisible = firstVisible;
     }
     
-    int y = 50;  // Начальная Y позиция
+    int y = 50;  // Initial Y position
     
     for (int i = 0; i < 8; i++) {
         int itemIdx = firstVisible + i;
         
-        // Проверяем границы
+        // Check bounds
         if (itemIdx >= listItemCount) break;
         
         bool isSelected = (itemIdx == selectedListItem);
         bool isChecked = listItemsChecked[itemIdx];
         
-        // Устанавливаем размер и цвет
+        // Set size and color
         if (isSelected) {
-            lcd.setTextSize(4);  // Большой шрифт для выбранного
+            lcd.setTextSize(4);  // Large font for selected
             lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
         } else {
-            lcd.setTextSize(2);  // Маленький шрифт для остальных
+            lcd.setTextSize(2);  // Small font for others
             lcd.setTextColor(isChecked ? TFT_GREEN : TFT_WHITE, TFT_BLACK);
         }
         
         lcd.setCursor(30, y);
         
-        // Получаем имя элемента
+        // Get item name
         String name = listItems[itemIdx];
         
-        // Обрезаем длинные имена
+        // Truncate long names
         int maxLen = isSelected ? 20 : 35;
         if (name.length() > maxLen) {
             name = name.substring(0, maxLen - 3) + "...";
         }
         
-        // Показываем пометку [✓] перед именем если элемент помечен
+        // Show [✓] mark before name if item is checked
         if (isChecked) {
             lcd.print("[✓] ");
         }
         
         lcd.print(name);
         
-        // Следующая строка
+        // Next line
         y += isSelected ? 32 : 22;
     }
     
-    lcd.endWrite();  // Завершаем группу SPI операций
+    lcd.endWrite();  // End SPI operation group
 }
 
 // ============================================
-// Функция для сброса состояния при переключении экранов
+// Function to reset state when switching screens
 // ============================================
 void resetScrollScreenState() {
     scrollScreenInitialized = false;
@@ -711,27 +711,27 @@ void loop() {
     if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
         auto keys = M5Cardputer.Keyboard.keysState();
         
-        // Пробел - переключение между экранами
+        // Space - switch between screens
         if (keys.space) {
             showScrollTest = !showScrollTest;
             Serial.printf(">>> Screen switched: %s\n", showScrollTest ? "Scroll Test" : "Main");
             
-            // Запоминаем время переключения экрана
+            // Remember screen switch time
             screenSwitchTime = millis();
             
-            // Сбрасываем счетчик ошибок и состояние при переключении экранов
+            // Reset error counter and state when switching screens
             i2cErrorCount = 0;
             lastScrollReadTime = 0;
             lastScrollNavTime = 0;
-            lastButtonState = false;  // Сбрасываем состояние кнопки
+            lastButtonState = false;  // Reset button state
             
             if (showScrollTest) {
-                // Переходим на экран скролла - ПОЛНАЯ очистка экрана перед переключением
-                lcd.fillScreen(TFT_BLACK);  // Полная очистка для удаления артефактов
+                // Switch to scroll screen - FULL screen clear before switch
+                lcd.fillScreen(TFT_BLACK);  // Full clear to remove artifacts
                 resetScrollScreenState();
                 drawScrollTest();
             } else {
-                // Возвращаемся на главный экран
+                // Return to main screen
                 lcd.fillScreen(TFT_BLACK);
                 lcd.setCursor(10, 10);
                 lcd.setTextSize(2);
@@ -758,7 +758,7 @@ void loop() {
     }
     
     if (!moduleFound) {
-        // Модуль не найден - не пытаемся читать
+        // Module not found - don't try to read
         delay(1000);
         return;
     }
@@ -767,81 +767,81 @@ void loop() {
     if (showScrollTest) {
         unsigned long currentTime = millis();
         
-        // ВАЖНО: Не читать I2C сразу после переключения экрана!
-        // Даем модулю время на восстановление после переключения
+        // IMPORTANT: Don't read I2C immediately after screen switch!
+        // Give module time to recover after switch
         if (screenSwitchTime > 0 && (currentTime - screenSwitchTime) < SCREEN_SWITCH_DELAY) {
             delay(10);
             return;
         }
         
-        // Проверяем интервал чтения - не читать слишком часто
+        // Check read interval - don't read too often
         if (currentTime - lastScrollReadTime < SCROLL_READ_INTERVAL) {
             delay(10);
             return;
         }
         lastScrollReadTime = currentTime;
         
-        // Если слишком много ошибок подряд - делаем мягкий ресет шины
+        // If too many errors in a row - do soft bus reset
         if (i2cErrorCount >= MAX_I2C_ERRORS) {
-            i2cBusReset();  // Мягкий ресет шины
+            i2cBusReset();  // Soft bus reset
             i2cErrorCount = 0;
             delay(200);
-            return;  // Пропускаем чтение после ошибок
+            return;  // Skip read after errors
         }
         
-        // Читаем инкрементальное значение энкодера для навигации
+        // Read incremental encoder value for navigation
         uint8_t incData[2] = {0};
         if (readScrollRegister(SCROLL_INC_ENCODER_REG, 2, incData)) {
-            i2cErrorCount = 0;  // Успешное чтение - сбрасываем счетчик ошибок
+            i2cErrorCount = 0;  // Successful read - reset error counter
             int16_t incValue = (int16_t)(incData[0] | (incData[1] << 8));
             
             if (incValue != 0 && (currentTime - lastScrollNavTime > SCROLL_NAV_DEBOUNCE)) {
-                // Навигация по списку
+                // Navigate list
                 if (incValue > 0) {
-                    // Вращение вправо → список вниз
+                    // Rotate right → list down
                     if (selectedListItem < listItemCount - 1) {
                         selectedListItem++;
                         drawScrollTest();
                         Serial.printf(">>> Scroll DOWN → Item %d/%d\n", selectedListItem + 1, listItemCount);
-                        setScrollLEDFast(0x00FF00);  // Зеленый при прокрутке вниз
+                        setScrollLEDFast(0x00FF00);  // Green when scrolling down
                     }
                 } else {
-                    // Вращение влево → список вверх
+                    // Rotate left → list up
                     if (selectedListItem > 0) {
                         selectedListItem--;
                         drawScrollTest();
                         Serial.printf(">>> Scroll UP → Item %d/%d\n", selectedListItem + 1, listItemCount);
-                        setScrollLEDFast(0xFF0000);  // Красный при прокрутке вверх
+                        setScrollLEDFast(0xFF0000);  // Red when scrolling up
                     }
                 }
                 lastScrollNavTime = currentTime;
             }
         } else {
-            // Ошибка чтения - увеличиваем счетчик (но не блокируем полностью)
+            // Read error - increment counter (but don't block completely)
             i2cErrorCount++;
-            // Логируем только каждую 5-ю ошибку чтобы не засорять Serial
+            // Log only every 5th error to avoid cluttering Serial
             if (i2cErrorCount % 5 == 0) {
                 Serial.printf(">>> I2C read errors: %d\n", i2cErrorCount);
             }
         }
         
-        // Читаем состояние кнопки для пометки/снятия пометки (реже чем энкодер)
+        // Read button state for check/uncheck (less often than encoder)
         static unsigned long lastButtonReadTime = 0;
-        if (currentTime - lastButtonReadTime > 100) {  // Читаем кнопку раз в 100мс
+        if (currentTime - lastButtonReadTime > 100) {  // Read button once per 100ms
             uint8_t buttonData[1] = {0};
             if (readScrollRegister(SCROLL_BUTTON_REG, 1, buttonData)) {
-                i2cErrorCount = 0;  // Успешное чтение - сбрасываем счетчик
+                i2cErrorCount = 0;  // Successful read - reset counter
                 bool buttonState = (buttonData[0] != 0);
                 
                 if (buttonState && !lastButtonState) {
-                    // Кнопка нажата - переключаем пометку
+                    // Button pressed - toggle check
                     listItemsChecked[selectedListItem] = !listItemsChecked[selectedListItem];
                     drawScrollTest();
                     Serial.printf(">>> Item %d %s\n", selectedListItem + 1, 
                                  listItemsChecked[selectedListItem] ? "CHECKED" : "UNCHECKED");
-                    setScrollLEDFast(0x0000FF);  // Синий при пометке
+                    setScrollLEDFast(0x0000FF);  // Blue when checking
                     delay(100);
-                    setScrollLEDFast(0x000000);  // Выключаем LED
+                    setScrollLEDFast(0x000000);  // Turn off LED
                 }
                 
                 lastButtonState = buttonState;
@@ -854,31 +854,31 @@ void loop() {
     }
     
     // ═══ ГЛАВНЫЙ ЭКРАН (оригинальный тест) ═══
-    // Сбрасываем счетчик ошибок при возврате на главный экран
+    // Reset error counter when returning to main screen
     i2cErrorCount = 0;
     
-    // Читаем инкрементальное значение энкодера (0x50) - это то что нужно!
-    // Этот регистр показывает изменение с последнего чтения и автоматически сбрасывается
+    // Read incremental encoder value (0x50) - this is what we need!
+    // This register shows change since last read and automatically resets
     uint8_t incData[2] = {0};
     if (readScrollRegister(SCROLL_INC_ENCODER_REG, 2, incData)) {
-        i2cErrorCount = 0;  // Успешное чтение - сбрасываем счетчик ошибок
+        i2cErrorCount = 0;  // Successful read - reset error counter
         int16_t incValue = (int16_t)(incData[0] | (incData[1] << 8));  // little-endian
         
         if (incValue != 0) {
-            // Было вращение!
-            lastEncoderValue += incValue;  // Обновляем общее значение
+            // Rotation detected!
+            lastEncoderValue += incValue;  // Update total value
             Serial.printf(">>> Encoder Increment: %+d (Total: %d)\n", incValue, lastEncoderValue);
             
-            // Меняем цвет LED в зависимости от направления вращения
+            // Change LED color based on rotation direction
             if (incValue > 0) {
-                // Вращение вправо - зеленый
-                setScrollLEDFast(0x00FF00);  // Зеленый
+                // Rotate right - green
+                setScrollLEDFast(0x00FF00);  // Green
             } else {
-                // Вращение влево - красный
-                setScrollLEDFast(0xFF0000);  // Красный
+                // Rotate left - red
+                setScrollLEDFast(0xFF0000);  // Red
             }
             
-            // Отображение на внешнем дисплее
+            // Display on external screen
             lcd.fillRect(0, 130, 480, 100, TFT_BLACK);
             lcd.setCursor(10, 140);
             lcd.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -891,14 +891,14 @@ void loop() {
         }
     }
     
-    // Также читаем абсолютное значение энкодера (0x10) для синхронизации
+    // Also read absolute encoder value (0x10) for synchronization
     int encoderValue = readScrollRegisterValue(SCROLL_ENCODER_REG, 2);
     if (encoderValue != lastEncoderValue) {
-        // Обновляем если изменилось (на случай если пропустили инкремент)
+        // Update if changed (in case we missed increment)
         lastEncoderValue = encoderValue;
     }
     
-    // Читаем состояние кнопки (0x20)
+    // Read button state (0x20)
     uint8_t buttonData[1] = {0};
     if (readScrollRegister(SCROLL_BUTTON_REG, 1, buttonData)) {
         bool buttonState = (buttonData[0] != 0);
@@ -906,35 +906,35 @@ void loop() {
         if (buttonState != lastButtonState) {
             Serial.printf(">>> Button: %s\n", buttonState ? "PRESSED" : "RELEASED");
             
-            // Меняем цвет LED при нажатии кнопки
+            // Change LED color on button press
             if (buttonState) {
-                // Кнопка нажата - синий
-                setScrollLEDFast(0x0000FF);  // Синий
+                // Button pressed - blue
+                setScrollLEDFast(0x0000FF);  // Blue
             } else {
-                // Кнопка отпущена - выключаем LED
-                setScrollLEDFast(0x000000);  // Черный (выключено)
+                // Button released - turn off LED
+                setScrollLEDFast(0x000000);  // Black (off)
             }
             
-            // Отображение на внешнем дисплее
+            // Display on external screen
             lcd.fillRect(0, 240, 480, 80, TFT_BLACK);
             lcd.setCursor(10, 250);
             lcd.setTextSize(2);
             lcd.setTextColor(buttonState ? TFT_RED : TFT_WHITE, TFT_BLACK);
             lcd.printf("Button: %s", buttonState ? "PRESSED" : "RELEASED");
             
-            // При нажатии кнопки - сброс энкодера (как в MicroPython примере)
+            // On button press - reset encoder (like MicroPython example)
             if (buttonState) {
                 if (moduleFound) {
                     uint8_t address = (foundAddress != 0) ? foundAddress : UNIT_SCROLL_I2C_ADDRESS;
                     Wire.beginTransmission(address);
                     Wire.write(SCROLL_RESET_REG);
-                    Wire.write(1);  // Запись 1 для сброса энкодера
+                    Wire.write(1);  // Write 1 to reset encoder
                     Wire.endTransmission();
                 }
                 lastEncoderValue = 0;
                 Serial.println(">>> Encoder reset!");
                 
-                // Обновляем отображение
+                // Update display
                 lcd.fillRect(0, 130, 480, 100, TFT_BLACK);
                 lcd.setCursor(10, 140);
                 lcd.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -946,6 +946,6 @@ void loop() {
         }
     }
     
-    delay(50);  // Небольшая задержка для стабильности
+    delay(50);  // Small delay for stability
 }
 
