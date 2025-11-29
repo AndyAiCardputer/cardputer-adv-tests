@@ -3,7 +3,7 @@
 **Repository:** Collection of test sketches for M5Stack Cardputer-Adv  
 **Author:** AndyAiCardputer  
 **License:** MIT  
-**Last Updated:** January 13, 2025
+**Last Updated:** November 28, 2025
 
 ---
 
@@ -42,6 +42,31 @@ Test for M5Unit-Scroll encoder/scroll module with external ILI9488 display.
 **Documentation:**
 - [User Guide](docs/M5UNIT_SCROLL_USER_GUIDE.md)
 - [Technical Guide](docs/M5UNIT_SCROLL_GUIDE.md)
+
+---
+
+### 2. I2C Keyboard Test (CardKeyBoard)
+**Location:** `tests/i2c-keyboard/`  
+**Status:** ✅ **Working perfectly!**
+
+Python-like terminal with external I2C keyboard (CardKeyBoard) support on external ILI9488 display.
+
+**Features:**
+- External I2C keyboard CardKeyBoard (address 0x5F)
+- Full key combination support (Key, Sym+Key, Shift+Key, Fn+Key)
+- Command history navigation with arrow keys
+- Terminal commands (help, clear, info, test, echo, version, print)
+- Scrolling support (Fn+. / Fn+;)
+- Optimized display updates (no flicker)
+
+**Hardware:**
+- M5Stack Cardputer-Adv
+- CardKeyBoard module (I2C, address 0x5F)
+- ILI9488 external display (480×320, optional)
+
+**Documentation:**
+- [Test README](tests/i2c-keyboard/README.md)
+- [Key Codes Reference](docs/CARDKEYBOARD_KEYCODES.md)
 
 ---
 
@@ -98,6 +123,7 @@ All documentation is available in the `docs/` folder:
 
 - **[M5Unit-Scroll User Guide](docs/M5UNIT_SCROLL_USER_GUIDE.md)** - User-friendly guide
 - **[M5Unit-Scroll Technical Guide](docs/M5UNIT_SCROLL_GUIDE.md)** - Technical reference for developers
+- **[CardKeyBoard Key Codes Reference](docs/CARDKEYBOARD_KEYCODES.md)** - Complete key codes table for I2C keyboard
 - **[External Display ILI9488 Guide](docs/EXTERNAL_DISPLAY_ILI9488_GUIDE.md)** - Display setup and optimization
 
 ---
@@ -110,6 +136,14 @@ All documentation is available in the `docs/` folder:
 - SDA → GPIO 2 (G2)
 - SCL → GPIO 1 (G1)
 - GND → GND
+- 5V → 5V
+
+### CardKeyBoard (I2C Keyboard)
+
+**PORT.A (Grove HY2.0-4P):**
+- SDA → GPIO 2 (G2)
+- SCL → GPIO 1 (G1)
+- GND → GND (REQUIRED!)
 - 5V → 5V
 
 ### External ILI9488 Display (Optional)
@@ -225,5 +259,5 @@ Found a bug or want to add a test? Feel free to:
 
 **Made with ❤️ by AndyAiCardputer**
 
-**Last Updated:** January 13, 2025
+**Last Updated:** November 28, 2025
 
