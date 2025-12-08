@@ -1,2 +1,0 @@
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libesp_psram.a CMakeFiles/__idf_esp_psram.dir/system_layer/esp_psram.c.obj CMakeFiles/__idf_esp_psram.dir/device/esp_psram_impl_ap_hex.c.obj CMakeFiles/__idf_esp_psram.dir/xip_impl/mmu_psram_flash_v2.c.obj
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libesp_psram.a

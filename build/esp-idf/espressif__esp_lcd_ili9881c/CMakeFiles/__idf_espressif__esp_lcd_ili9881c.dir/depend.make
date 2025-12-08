@@ -1,2 +1,0 @@
-# Empty dependencies file for __idf_espressif__esp_lcd_ili9881c.
-# This may be replaced when dependencies are built.

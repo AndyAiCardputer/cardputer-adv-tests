@@ -1,2 +1,0 @@
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libesp_wifi.a CMakeFiles/__idf_esp_wifi.dir/src/wifi_default.c.obj CMakeFiles/__idf_esp_wifi.dir/src/wifi_netif.c.obj CMakeFiles/__idf_esp_wifi.dir/src/wifi_default_ap.c.obj
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libesp_wifi.a

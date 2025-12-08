@@ -1,2 +1,0 @@
-CMakeFiles/usb_gamepad_display_test.elf.dir/project_elf_src_esp32p4.c.obj: \
- /Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/build/project_elf_src_esp32p4.c

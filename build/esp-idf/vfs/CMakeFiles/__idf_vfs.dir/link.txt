@@ -1,2 +1,0 @@
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libvfs.a CMakeFiles/__idf_vfs.dir/vfs.c.obj CMakeFiles/__idf_vfs.dir/vfs_eventfd.c.obj CMakeFiles/__idf_vfs.dir/vfs_semihost.c.obj CMakeFiles/__idf_vfs.dir/nullfs.c.obj
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libvfs.a

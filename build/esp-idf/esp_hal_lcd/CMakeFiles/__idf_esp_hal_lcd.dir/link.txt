@@ -1,2 +1,0 @@
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libesp_hal_lcd.a CMakeFiles/__idf_esp_hal_lcd.dir/lcd_hal.c.obj CMakeFiles/__idf_esp_hal_lcd.dir/mipi_dsi_hal.c.obj CMakeFiles/__idf_esp_hal_lcd.dir/esp32p4/lcd_periph.c.obj CMakeFiles/__idf_esp_hal_lcd.dir/esp32p4/mipi_dsi_periph.c.obj
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libesp_hal_lcd.a

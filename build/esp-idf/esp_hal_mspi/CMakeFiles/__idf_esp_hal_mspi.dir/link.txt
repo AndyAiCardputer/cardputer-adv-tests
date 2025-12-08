@@ -1,2 +1,0 @@
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libesp_hal_mspi.a CMakeFiles/__idf_esp_hal_mspi.dir/spi_flash_hal.c.obj CMakeFiles/__idf_esp_hal_mspi.dir/spi_flash_hal_iram.c.obj CMakeFiles/__idf_esp_hal_mspi.dir/spi_flash_encrypt_hal_iram.c.obj CMakeFiles/__idf_esp_hal_mspi.dir/spi_flash_hal_gpspi.c.obj
-/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libesp_hal_mspi.a
