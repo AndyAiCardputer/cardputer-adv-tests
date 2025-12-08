@@ -1,0 +1,2 @@
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libm5stack_tab5.a CMakeFiles/__idf_m5stack_tab5.dir/m5stack_tab5.c.obj CMakeFiles/__idf_m5stack_tab5.dir/esp_lcd_st7123.c.obj
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libm5stack_tab5.a

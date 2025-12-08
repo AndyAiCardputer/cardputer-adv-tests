@@ -1,0 +1,44 @@
+Command: make -j 14 all
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c: In function 'bsp_cam_osc_init':
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c:81:5: warning: 'intr_type' is deprecated [-Wdeprecated-declarations]
+   81 |     ch_conf.intr_type  = LEDC_INTR_DISABLE;
+      |     ^~~~~~~
+In file included from /Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c:9:
+/Users/a15/A_AI_Project/esp-idf-official/components/esp_driver_ledc/include/driver/ledc.h:40:22: note: declared here
+   40 |     ledc_intr_type_t intr_type __attribute__((deprecated));     /*!< @deprecated, no need to explicitly configure interrupt, handled in the driver */
+      |                      ^~~~~~~~~
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c: In function 'bsp_audio_codec_speaker_init':
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c:811:29: warning: unused variable 'gain' [-Wunused-variable]
+  811 |     esp_codec_dev_hw_gain_t gain = {
+      |                             ^~~~
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c:800:34: warning: unused variable 'gpio_if' [-Wunused-variable]
+  800 |     const audio_codec_gpio_if_t* gpio_if = audio_codec_new_gpio();
+      |                                  ^~~~~~~
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c: In function 'st7123_touch_callback':
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c:1292:9: warning: 'esp_lcd_touch_get_coordinates' is deprecated: This API will be removed in version 2.0.0. Use esp_lcd_touch_get_data instead! [-Wdeprecated-declarations]
+ 1292 |         bool pressed = esp_lcd_touch_get_coordinates(tp, touch_x, touch_y, touch_strength, &touch_cnt, 10);
+      |         ^~~~
+In file included from /Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/include/bsp/touch.h:18,
+                 from /Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c:27:
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/managed_components/espressif__esp_lcd_touch/include/esp_lcd_touch.h:317:6: note: declared here
+  317 | bool esp_lcd_touch_get_coordinates(esp_lcd_touch_handle_t tp, uint16_t *x, uint16_t *y, uint16_t *strength, uint8_t *point_num, uint8_t max_point_num);
+      |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c: At top level:
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c:1281:13: warning: 'st7123_touch_callback' defined but not used [-Wunused-function]
+ 1281 | static void st7123_touch_callback(esp_lcd_touch_handle_t tp)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/components/m5stack_tab5/m5stack_tab5.c:1007:27: warning: 'bsp_detect_display_type' defined but not used [-Wunused-function]
+ 1007 | static bsp_display_type_t bsp_detect_display_type(void)
+      |                           ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/main/app_main.cpp:715:13: warning: 'void hid_host_device_event(hid_host_device_handle_t, hid_host_driver_event_t, void*)' defined but not used [-Wunused-function]
+  715 | static void hid_host_device_event(hid_host_device_handle_t hid_device_handle,
+      |             ^~~~~~~~~~~~~~~~~~~~~
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/main/app_main.cpp:624:13: warning: 'void usb_host_client_task(void*)' defined but not used [-Wunused-function]
+  624 | static void usb_host_client_task(void* arg)
+      |             ^~~~~~~~~~~~~~~~~~~~
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/main/app_main.cpp:609:13: warning: 'void usb_host_event_callback(const usb_host_client_event_msg_t*, void*)' defined but not used [-Wunused-function]
+  609 | static void usb_host_event_callback(const usb_host_client_event_msg_t* event_msg, void* arg)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/main/app_main.cpp:365:13: warning: 'void display_update_gamepad_state(const gamepad_state_t*)' defined but not used [-Wunused-function]
+  365 | static void display_update_gamepad_state(const gamepad_state_t* state) {
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~

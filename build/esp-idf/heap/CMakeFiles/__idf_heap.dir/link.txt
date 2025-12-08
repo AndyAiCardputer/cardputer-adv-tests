@@ -1,0 +1,2 @@
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libheap.a CMakeFiles/__idf_heap.dir/heap_caps_base.c.obj CMakeFiles/__idf_heap.dir/heap_caps.c.obj CMakeFiles/__idf_heap.dir/heap_caps_init.c.obj CMakeFiles/__idf_heap.dir/multi_heap.c.obj CMakeFiles/__idf_heap.dir/tlsf/tlsf.c.obj CMakeFiles/__idf_heap.dir/port/memory_layout_utils.c.obj CMakeFiles/__idf_heap.dir/port/esp32p4/memory_layout.c.obj
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libheap.a

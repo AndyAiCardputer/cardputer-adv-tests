@@ -1,0 +1,145 @@
+dependencies:
+  espressif/cmake_utilities:
+    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.5.3
+  espressif/esp_codec_dev:
+    component_hash: 0d9e9bc288156eb55f79338d312e1ebf8c9dfbd5e7d13ef0f20ccb031b4e15cf
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.5.4
+  espressif/esp_lcd_ili9881c:
+    component_hash: a25511ff30f6265bb849db1027a875f84ee0bb0f009cf5b870d9b829377c578d
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32p4
+    version: 1.0.3
+  espressif/esp_lcd_st7703:
+    component_hash: c0453f7558215700729c1d6540915ba49ec2c4daffb895fae84c534da5c74672
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32p4
+    version: 1.0.5
+  espressif/esp_lcd_touch:
+    component_hash: cf4741f4903bdfe83c0a6606cb33314957e78605398954154f247e03acfd306b
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.2.0
+  espressif/esp_lcd_touch_gt911:
+    component_hash: bb9676973f0473bb1d5670230006542fc7cb950b415abad007198a0d33a73709
+    dependencies:
+    - name: espressif/esp_lcd_touch
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1.2.0
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.2.0
+  espressif/esp_lcd_touch_st7123:
+    component_hash: 3592f0dac4b3baf34c40679922026c1e22e9b925b9446e981cd1c23306ecfe65
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: espressif/esp_lcd_touch
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.0
+  espressif/usb:
+    component_hash: f583375dac409f4287f3be9c188e54200b01a5ae774194b3bfee7d67e4e269d0
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.4'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - esp32h4
+    - linux
+    version: 1.1.0
+  espressif/usb_host_hid:
+    component_hash: 824d49e67771af546c29d916bd8d7d3526cd2ff5e082d9021cab66d5f9c2b9bc
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    - name: espressif/usb
+      registry_url: https://components.espressif.com
+      require: public
+      rules:
+      - if: idf_version >=6.0
+      - if: target not in ["linux"]
+      version: ^1.0.0
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - esp32h4
+    - linux
+    version: 1.0.4
+  idf:
+    source:
+      type: idf
+    version: 6.1.0
+direct_dependencies:
+- espressif/esp_codec_dev
+- espressif/esp_lcd_ili9881c
+- espressif/esp_lcd_st7703
+- espressif/esp_lcd_touch_gt911
+- espressif/esp_lcd_touch_st7123
+- espressif/usb_host_hid
+- idf
+manifest_hash: 2af8da1395941821626991fd6c782f76322ec2ccca67398f30afe44bd1171a00
+target: esp32p4
+version: 2.0.0

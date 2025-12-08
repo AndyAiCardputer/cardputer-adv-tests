@@ -1,0 +1,2 @@
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libp256m.a "CMakeFiles/p256m.dir/p256-m_driver_entrypoints.c.obj" "CMakeFiles/p256m.dir/p256-m/p256-m.c.obj"
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libp256m.a

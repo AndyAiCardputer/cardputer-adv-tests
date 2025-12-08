@@ -1,0 +1,2 @@
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libcmock.a CMakeFiles/__idf_cmock.dir/CMock/src/cmock.c.obj
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libcmock.a

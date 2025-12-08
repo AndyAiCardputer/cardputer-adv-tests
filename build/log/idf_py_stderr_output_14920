@@ -1,0 +1,8 @@
+Command: make -j 14 all
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/managed_components/espressif__esp_lcd_st7703/esp_lcd_st7703.c: In function 'esp_lcd_new_panel_st7703':
+/Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/managed_components/espressif__esp_lcd_st7703/esp_lcd_st7703.c:69:29: error: 'esp_lcd_panel_dev_config_t' has no member named 'color_space'
+   69 |     switch (panel_dev_config->color_space) {
+      |                             ^~
+make[2]: *** [esp-idf/espressif__esp_lcd_st7703/CMakeFiles/__idf_espressif__esp_lcd_st7703.dir/esp_lcd_st7703.c.obj] Error 1
+make[1]: *** [esp-idf/espressif__esp_lcd_st7703/CMakeFiles/__idf_espressif__esp_lcd_st7703.dir/all] Error 2
+make: *** [all] Error 2

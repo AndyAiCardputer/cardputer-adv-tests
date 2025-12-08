@@ -1,0 +1,25 @@
+Command: cmake -G Unix Makefiles -B /Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test/build -DPYTHON_DEPS_CHECKED=1 -DPYTHON=/Users/a15/.espressif/python_env/idf6.1_py3.11_env/bin/python -DESP_PLATFORM=1 -DCCACHE_ENABLE=False /Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test
+CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+/var/folders/cd/sh4397yd5yz8q_t5x2djt2_c0000gn/T/kconfgen_tmp2j1hhtdd:30: warning: 'true' is not a valid value for the bool symbol ESP_TASK_WDT_INIT (defined at /Users/a15/A_AI_Project/esp-idf-official/components/esp_system/Kconfig:313). Assignment ignored.
+Configuration Report                                                            
+ ────────────────────────────────────────────────────────────────────────────── 
+   Parser Version: 1                                                            
+   Verbosity: default                                                           
+   Defaults policy: sdkconfig                                                   
+   Status: Finished with notifications                                          
+                                                                                
+  Miscellaneous                                                                 
+   ──────────────────────────────────────────────────────────────────────────   
+    * Trying to set symbol BSP_LCD_COLOR_FORMAT_RGB565 to n, but it is          
+    currently selected by choice BSP_LCD_COLOR_FORMAT. For setting it to n,     
+    set another choice symbol to y instead.                                     
+   ──────────────────────────────────────────────────────────────────────────   
+ ────────────────────────────────────────────────────────────────────────────── 

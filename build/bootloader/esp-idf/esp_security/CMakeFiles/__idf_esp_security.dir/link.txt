@@ -1,0 +1,2 @@
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ar qc libesp_security.a CMakeFiles/__idf_esp_security.dir/src/esp_crypto_lock.c.obj CMakeFiles/__idf_esp_security.dir/src/esp_crypto_periph_clk.c.obj CMakeFiles/__idf_esp_security.dir/src/esp_key_mgr.c.obj
+/Users/a15/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20250929/riscv32-esp-elf/bin/riscv32-esp-elf-ranlib libesp_security.a
