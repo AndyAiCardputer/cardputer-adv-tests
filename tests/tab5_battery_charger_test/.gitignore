@@ -1,0 +1,28 @@
+# ESP-IDF build files
+build/
+sdkconfig
+sdkconfig.old
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs.txt
+
+# Personal notes and datasheets (not needed for GitHub)
+PLAN_TOMORROW.md
+TODAY_SUMMARY.md
+untitled*.txt
+micro_pc.txt
+dsh_*.txt
+
