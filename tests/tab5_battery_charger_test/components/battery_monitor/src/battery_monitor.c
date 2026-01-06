@@ -18,58 +18,11 @@ extern bool bsp_usb_c_detect(void);
 
 static const char *TAG = "BATTERY_MONITOR";
 
-// Thresholds for battery detection (in mA)
-#define BATTERY_CURRENT_THRESHOLD_MA 30.0f  // Minimum current to consider battery present
-#define BATTERY_CHARGE_THRESHOLD_MA 20.0f   // Current threshold for charging detection
-#define BATTERY_DISCHARGE_THRESHOLD_MA 20.0f // Current threshold for discharging detection
 
-// Voltage classification for battery detection (Variant A: voting classifier)
-typedef enum {
-    VCLS_LOW,   // USB-only / no battery: V < 5.8V
-    VCLS_HIGH,  // Battery/VSYS-high: V > 7.2V
-    VCLS_MID    // Uncertain: 5.8V - 7.2V (ignored for decision)
-} voltage_class_t;
-
-typedef enum {
-    BAT_ABSENT,
-    BAT_PRESENT,
-    BAT_UNKNOWN
-} battery_state_t;
-
-typedef enum {
-    CHG_IDLE,              // not charging
-    CHG_START_DETECT,      // charging just started, analyzing current
-    CHG_ACTIVE             // charging active, coulomb counting active
-} charge_state_t;
-
-#define V_LOW_THRESHOLD_MV  5800   // mV - below this = LOW (USB/no battery)
-#define V_HIGH_THRESHOLD_MV 7200   // mV - above this = HIGH (battery present)
-#define WINDOW_SIZE          20     // 20 samples ~2s at 10Hz (100ms updates)
-#define NEED_PERCENT         70     // 70% dominance required
-
-// Static variables for voltage classification voting
-static voltage_class_t voltage_window[WINDOW_SIZE];
-static int window_index = 0;
-static int low_count = 0;
-static int high_count = 0;
-static bool window_filled = false;
-static battery_state_t cached_battery_state = BAT_UNKNOWN;
-
-// Coulomb counting for discharge tracking
-static float discharged_mah = 0.0f;  // Accumulated discharged capacity in mAh
-static int initial_level_on_discharge = -1;  // Battery level when discharge started
-static uint32_t last_discharge_update_time_ms = 0;  // Last time we updated discharge integration
-static bool was_charging = false;  // Track if we were charging in previous call
-
-// Coulomb counting for charge tracking - State Machine approach
-static charge_state_t charge_state = CHG_IDLE;
-static float charged_mah = 0.0f;  // Accumulated charged capacity in mAh
-static int initial_level_on_charge = -1;  // Battery level when charge started (fixed after CHG_START_DETECT)
-static uint32_t last_charge_update_time_ms = 0;  // Last time we updated charge integration
-static float last_charge_current = 0.0f;  // Previous charge current for rapid increase detection
-static uint32_t charge_start_time_ms = 0;  // When charging started
-static float chg_max_current_ma = 0.0f;  // Maximum current during START_DETECT window
-static bool charging_latched = false;  // Hysteresis to prevent flapping
+// Simple battery level storage (for VSYS fallback)
+static int last_known_level = -1;  // -1 = not loaded yet
+static bool level_loaded_from_nvs = false;
+static uint32_t last_save_time_ms = 0;
 
 // INA226 registers
 #define INA226_REG_CONFIG      0x00
@@ -163,10 +116,11 @@ static float read_bus_voltage(void)
         return -1.0f; // Error
     }
     
-    // Bus voltage: bits 15-3 are voltage, LSB = 1.25mV
-    // Shift right by 3 bits to get voltage value
-    uint16_t voltage_value = bus_raw >> 3;
-    return (float)voltage_value * 0.00125f; // Convert to volts
+    // Official M5Tab5-UserDemo and MicroPython version: NO shift!
+    // Just multiply by 1.25mV (LSB = 1.25 mV)
+    // Reference: M5Tab5-UserDemo/platforms/tab5/components/power_monitor_ina226/src/ina226.cpp
+    // Reference: MicroPython tab5-egpio library (micro_pc.txt)
+    return (float)bus_raw * 0.00125f; // Convert to volts
 }
 
 static float read_current(void)
@@ -223,35 +177,6 @@ static float read_current_from_shunt_ma_internal(void)
     return current_a * 1000.0f;  // Convert to mA (signed: negative = charging)
 }
 
-// Battery detection window (sample current over time to detect battery presence)
-// Returns true if battery is present (significant current detected)
-static bool detect_battery_present_window(float (*read_current_ma)(void), 
-                                          int samples, int period_ms, 
-                                          float thr_ma)
-{
-    int hits = 0;
-    float max_abs = 0.0f;
-    
-    for (int i = 0; i < samples; i++) {
-        float i_ma = read_current_ma();
-        float abs_current = fabsf(i_ma);
-        
-        if (abs_current > max_abs) {
-            max_abs = abs_current;
-        }
-        
-        if (abs_current > thr_ma) {
-            hits++;
-        }
-        
-        vTaskDelay(pdMS_TO_TICKS(period_ms));
-    }
-    
-    // Battery present if we see significant current at least 2 times, 
-    // or if max current is significantly above threshold
-    // This filters out noise and random spikes
-    return (hits >= 2) || (max_abs > thr_ma * 1.5f);
-}
 
 // I2C scan function
 static void scan_i2c_bus(i2c_master_bus_handle_t bus_handle) {
@@ -320,9 +245,9 @@ static void dump_ina226_registers(void) {
     float shunt_v = (float)r01 * 0.0000025f;
     ESP_LOGI(TAG, "  SHUNT: %.6fV (raw=%d)", shunt_v, (int)r01);
     
-    // Decode bus voltage (unsigned, LSB = 1.25mV)
-    float bus_v = (float)(r02 >> 3) * 0.00125f;
-    ESP_LOGI(TAG, "  BUS: %.3fV (raw=%04X, shifted=%d)", bus_v, r02, r02 >> 3);
+    // Decode bus voltage (unsigned, LSB = 1.25mV) - NO shift!
+    float bus_v = (float)r02 * 0.00125f;
+    ESP_LOGI(TAG, "  BUS: %.3fV (raw=%04X)", bus_v, r02);
     
     // Decode current (if calibration is set)
     if (current_lsb > 0) {
@@ -522,65 +447,6 @@ esp_err_t battery_monitor_init(i2c_master_bus_handle_t i2c_bus_handle)
     return ESP_OK;
 }
 
-// Classify voltage into LOW/HIGH/MID
-static voltage_class_t classify_voltage(int voltage_mv) {
-    if (voltage_mv < V_LOW_THRESHOLD_MV) {
-        return VCLS_LOW;
-    }
-    if (voltage_mv > V_HIGH_THRESHOLD_MV) {
-        return VCLS_HIGH;
-    }
-    return VCLS_MID;  // Ignored for decision
-}
-
-// Push new classification into window and update counters
-static void push_voltage_class(voltage_class_t cls) {
-    // Remove old value from counters
-    if (window_filled) {
-        voltage_class_t old = voltage_window[window_index];
-        if (old == VCLS_LOW) {
-            low_count--;
-        } else if (old == VCLS_HIGH) {
-            high_count--;
-        }
-    }
-    
-    // Add new value
-    voltage_window[window_index] = cls;
-    if (cls == VCLS_LOW) {
-        low_count++;
-    } else if (cls == VCLS_HIGH) {
-        high_count++;
-    }
-    
-    // Advance window
-    window_index = (window_index + 1) % WINDOW_SIZE;
-    if (window_index == 0) {
-        window_filled = true;
-    }
-}
-
-// Update battery presence using voting algorithm
-static battery_state_t update_battery_presence(int voltage_mv) {
-    voltage_class_t cls = classify_voltage(voltage_mv);
-    push_voltage_class(cls);
-    
-    int window_size = window_filled ? WINDOW_SIZE : window_index;
-    if (window_size < 5) {
-        return cached_battery_state;  // Not enough data yet
-    }
-    
-    int need_count = (window_size * NEED_PERCENT) / 100;
-    
-    if (high_count >= need_count) {
-        cached_battery_state = BAT_PRESENT;
-    } else if (low_count >= need_count) {
-        cached_battery_state = BAT_ABSENT;
-    }
-    // Otherwise keep previous state
-    
-    return cached_battery_state;
-}
 
 esp_err_t battery_monitor_read(battery_status_t *status)
 {
@@ -593,450 +459,106 @@ esp_err_t battery_monitor_read(battery_status_t *status)
         status->level = -1;
         status->voltage_mv = -1;
         status->is_charging = false;
+        status->battery_present = false;
         return ESP_ERR_INVALID_STATE;
     }
     
     status->initialized = true;
     
-    // Read bus voltage (this is the battery pack voltage for 2S Li-Po)
+    // Read bus voltage
     float bus_voltage = read_bus_voltage();
     if (bus_voltage < 0) {
         status->level = -1;
         status->voltage_mv = -1;
         status->is_charging = false;
+        status->battery_present = false;
         return ESP_FAIL;
     }
     
-    // bus_voltage is already in volts (e.g., 7.602V for 2S battery)
-    // Convert to mV: multiply by 1000
+    // Convert to mV
     int raw_voltage_mv = (int)(bus_voltage * 1000.0f);
     
-    // INA226 measures VSYS (~0.98V), not VBAT (6.0-8.4V)
-    // If voltage is too low (< 3V), it's VSYS, not battery voltage
-    // Mark as invalid - will be calculated from battery level later
-    if (raw_voltage_mv < 3000) {
-        // This is VSYS, not VBAT - mark as invalid for now
-        status->voltage_mv = -1;
-    } else {
-        // Valid voltage reading (shouldn't happen with Tab5, but keep for compatibility)
-        status->voltage_mv = raw_voltage_mv;
-    }
-    
-    // Read current from shunt voltage (more reliable than CURRENT register)
-    // Returns current in mA (signed: negative = charging, positive = discharging)
+    // Read current
     float current_ma = read_current_from_shunt_ma_internal();
     
-    // Check USB-C presence (for context)
-    bool usb_present = bsp_usb_c_detect();
+    // Determine charging status (negative = charging)
+    status->is_charging = (current_ma < -10.0f);
     
-    // Determine charging/discharging status based on current sign
-    // Negative current = charging (current flows INTO battery)
-    // Positive current = discharging (current flows OUT of battery)
-    bool charging = (current_ma < -BATTERY_CHARGE_THRESHOLD_MA);
-    bool discharging = (current_ma > BATTERY_DISCHARGE_THRESHOLD_MA);
-    
-    status->is_charging = charging;
-    
-    // Determine battery presence using voltage classification voting (Variant A)
-    // This prevents "jumping" between states by using voting over a window instead of median filter
-    battery_state_t bat_state = update_battery_presence(status->voltage_mv);
-    bool battery_present = (bat_state == BAT_PRESENT);
-    
-    // FALLBACK: If voltage-based detection failed, use current-based detection
-    // This is needed because bus voltage may not reflect battery voltage (INA226 measures VSYS, not VBAT)
-    // Note: Trickle current ~5mA can exist even without battery (protection mosfet + presence sense circuit)
-    // So threshold must be above 5mA to avoid false positives
-    if (!battery_present) {
-        float abs_current = fabsf(current_ma);
-        
-        if (usb_present) {
-            // USB connected: any significant current (> 10mA) indicates battery present
-            // Trickle current without battery is ~5mA, so 10mA threshold avoids false positives
-            if (abs_current > 10.0f) {
-                ESP_LOGI(TAG, "Voltage detection: ABSENT, but significant current detected (%.1f mA) with USB - battery PRESENT", current_ma);
-                battery_present = true;
-                bat_state = BAT_PRESENT;
-            }
-            // Strong charging (> 30mA) definitely indicates battery
-            else if (current_ma < -30.0f) {
-                ESP_LOGI(TAG, "Voltage detection: ABSENT, but strong charging current detected (%.1f mA) - battery PRESENT", current_ma);
-                battery_present = true;
-                bat_state = BAT_PRESENT;
-            }
-        }
-        // USB not connected: discharging (> 10mA) indicates battery present
-        else if (current_ma > 10.0f) {
-            ESP_LOGI(TAG, "Voltage detection: ABSENT, but discharge current detected (%.1f mA) - battery PRESENT", current_ma);
-            battery_present = true;
-            bat_state = BAT_PRESENT;
-        }
-    }
-    
-    // Get shunt voltage and current for detection check
-    int shunt_uv = 0;
-    float current_ma_check = 0.0f;
-    esp_err_t shunt_err = battery_monitor_get_shunt_voltage_uv(&shunt_uv);
-    esp_err_t current_err = battery_monitor_get_current_ma(&current_ma_check);
-    
-    // Temporary fix: if USB is connected but no current detected, assume no battery
-    if (usb_present && battery_present && shunt_err == ESP_OK && current_err == ESP_OK) {
-        float abs_current = fabsf(current_ma_check);
-        int shunt_uv_abs = (shunt_uv < 0) ? -shunt_uv : shunt_uv;
-        
-        // If USB connected but current is essentially zero for extended period, likely no battery
-        static int zero_current_count = 0;
-        if (abs_current < 1.0f && shunt_uv_abs < 10) {  // Less than 1mA and <10µV shunt
-            zero_current_count++;
-            if (zero_current_count >= 30) {  // 3 seconds at 100ms rate
-                ESP_LOGW(TAG, "USB connected but no current detected for 3s - assuming NO BATTERY");
-                battery_present = false;
-                bat_state = BAT_ABSENT;
-                zero_current_count = 0;
-            }
-        } else {
-            zero_current_count = 0;  // Reset counter if current detected
-        }
+    // Simple battery presence: voltage in range 6.0-8.4V OR significant current
+    bool battery_present = false;
+    if (raw_voltage_mv >= 6000 && raw_voltage_mv <= 8400) {
+        // Valid battery voltage range
+        battery_present = true;
+        status->voltage_mv = raw_voltage_mv;
+    } else if (fabsf(current_ma) > 10.0f) {
+        // Significant current flow indicates battery present
+        battery_present = true;
+        // Voltage is VSYS, estimate from last known level
+        status->voltage_mv = -1;
+    } else {
+        // No battery
+        battery_present = false;
+        status->voltage_mv = raw_voltage_mv;
     }
     
     status->battery_present = battery_present;
     
-    // Periodic register dump for debugging
-    uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
-    static uint32_t last_dump_time = 0;
-    if ((now - last_dump_time) >= 5000) {  // Every 5 seconds
-        dump_ina226_registers();
-        last_dump_time = now;
-    }
-    
-    // Log battery check occasionally
-    static uint32_t last_battery_log = 0;
-    if ((now - last_battery_log) >= 2000) {
-        int window_size = window_filled ? WINDOW_SIZE : window_index;
-        ESP_LOGI(TAG, "Battery check: state=%s (LOW=%d HIGH=%d/%d), voltage=%d mV, current=%.2f mA, USB=%d", 
-                 bat_state == BAT_PRESENT ? "PRESENT" : (bat_state == BAT_ABSENT ? "ABSENT" : "UNKNOWN"),
-                 low_count, high_count, window_size,
-                 status->voltage_mv, current_ma, usb_present);
-        last_battery_log = now;
-    }
-    
-    // If USB is connected but battery not detected, show "NO BATTERY"
-    if (usb_present && !battery_present && status->voltage_mv > 8000) {
-        // USB power without battery - voltage is high but no current flow
-        status->level = -1;
-        return ESP_OK;
-    }
-    
-    // INA226 measures VSYS (~0.98V), not VBAT (6.0-8.4V)
-    // We cannot directly read battery voltage, so we estimate level from charging current
-    // Calibration: At 670mA charging current, battery level is 75%
-    
     if (!battery_present) {
         status->level = -1;
         return ESP_OK;
     }
     
-    // Estimate battery level based on charging/discharging behavior
-    // Static variable to store last known battery level
-    // Load from NVS on first call, then use cached value
-    static int last_known_level = -1;  // -1 = not loaded yet
-    static bool level_loaded_from_nvs = false;
-    static uint32_t last_save_time_ms = 0;
-    
-    // Load level from NVS on first call
-    if (!level_loaded_from_nvs) {
-        int nvs_level = load_battery_level_from_nvs();
-        if (nvs_level >= 0) {
-            last_known_level = nvs_level;
-            ESP_LOGI(TAG, "Loaded battery level from NVS: %d%%", last_known_level);
+    // Calculate battery level from voltage (like NES emulator)
+    if (status->voltage_mv >= 6000 && status->voltage_mv <= 8400) {
+        // Valid voltage reading - use it directly
+        // For 2S Li-Po: divide by 2 to get single cell voltage
+        float single_cell_mv = status->voltage_mv / 2.0f;
+        
+        // Calculate level: 3.0V (0%) to 4.2V (100%) per cell
+        if (single_cell_mv < 3000) {
+            status->level = 0;
+        } else if (single_cell_mv > 4200) {
+            status->level = 100;
         } else {
-            last_known_level = 75;  // Default if not found in NVS
-            ESP_LOGI(TAG, "No battery level in NVS, using default: %d%%", last_known_level);
-        }
-        level_loaded_from_nvs = true;
-    }
-    
-    // Get current time for integration
-    uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
-    
-    // Detect charging state with hysteresis (edge detection) - based on current, not USB!
-    // Hysteresis: enter charging < -20mA, exit charging > -5mA
-    if (!charging_latched) {
-        charging_latched = (current_ma < -20.0f);  // Enter: stricter threshold
-    } else {
-        charging_latched = (current_ma < -5.0f);   // Exit: softer threshold
-    }
-    bool charging_now = charging_latched;
-    
-    if (charging_now && !was_charging) {
-        // Edge: charging just started
-        charge_state = CHG_START_DETECT;
-        charge_start_time_ms = now_ms;
-        last_charge_current = 0.0f;
-        chg_max_current_ma = 0.0f;  // Reset maximum for new window
-        charged_mah = 0.0f;
-        initial_level_on_charge = -1;
-        
-        // Reset discharge tracking
-        discharged_mah = 0.0f;
-        initial_level_on_discharge = -1;
-        
-        ESP_LOGI(TAG, "Charging started: IDLE -> START_DETECT");
-    }
-    
-    if (charge_state == CHG_START_DETECT) {
-        // Check: if charging stopped before window completion - exit gracefully
-        if (!charging_now) {
-            charge_state = CHG_IDLE;
-            initial_level_on_charge = -1;
-            charged_mah = 0.0f;
-            chg_max_current_ma = 0.0f;
-            ESP_LOGI(TAG, "Charging stopped early: START_DETECT -> IDLE");
-        } else {
-            // Collect maximum current in ~1.5 second window
-            float abs_charge_current = -current_ma;
-            
-            // Update maximum current
-            if (abs_charge_current > chg_max_current_ma) {
-                chg_max_current_ma = abs_charge_current;
-            }
-            
-            // Optional: log rapid increase (for debugging)
-            if (last_charge_current > 0.0f) {
-                float current_increase = abs_charge_current - last_charge_current;
-                uint32_t time_since_start = now_ms - charge_start_time_ms;
-                if (current_increase > 200.0f && time_since_start < 5000) {
-                    ESP_LOGW(TAG, "Rapid current increase detected: %.1f -> %.1f mA (%.1f mA increase)", 
-                             last_charge_current, abs_charge_current, current_increase);
-                }
-            }
-            
-            // CRITICAL: update every tick for next iteration
-            last_charge_current = abs_charge_current;
-            
-            // Wait ~1.5 seconds to see maximum startup current
-            if ((now_ms - charge_start_time_ms) >= 1500) {
-                // Use maximum current in window to determine initial level
-                float use_current = chg_max_current_ma;
-                
-                // Determine initial level based on MAXIMUM charging current in window
-                if (use_current > 600.0f) {
-                    // Very high charge current: battery is likely discharged
-                    // More realistic thresholds:
-                    // 850+ mA = 0% (fully discharged)
-                    // 800-850 mA = 0-5% (very low charge)
-                    // 700-800 mA = 5-15% (low charge)
-                    // 600-700 mA = 15-25% (partially discharged)
-                    float estimated_level;
-                    if (use_current > 850.0f) {
-                        // Very high current (>850mA): battery fully discharged
-                        estimated_level = 0.0f;
-                    } else if (use_current > 800.0f) {
-                        // High current (800-850mA): very low charge, 0-5%
-                        estimated_level = ((850.0f - use_current) / 50.0f) * 5.0f;
-                    } else if (use_current > 700.0f) {
-                        // Medium-high current (700-800mA): low charge, 5-15%
-                        estimated_level = 5.0f + ((800.0f - use_current) / 100.0f) * 10.0f;
-                    } else {
-                        // Medium current (600-700mA): partially discharged, 15-25%
-                        estimated_level = 15.0f + ((700.0f - use_current) / 100.0f) * 10.0f;
-                    }
-                    initial_level_on_charge = (int)estimated_level;
-                    ESP_LOGW(TAG, "High charge current (%.1f mA max) detected - starting from %d%%", 
-                             use_current, initial_level_on_charge);
-                } else if (use_current > 300.0f) {
-                    // Medium charge current: use last known level, but be conservative if it's 0%
-                    if (last_known_level == 0) {
-                        // If NVS had 0% but current is medium, battery may be higher
-                        initial_level_on_charge = 20;  // Conservative estimate for medium current
-                        ESP_LOGI(TAG, "Medium charge current (%.1f mA max) with 0%% in NVS - using conservative estimate: %d%%", 
-                                 use_current, initial_level_on_charge);
-                    } else {
-                        initial_level_on_charge = (last_known_level >= 0) ? last_known_level : 50;
-                        ESP_LOGI(TAG, "Medium charge current (%.1f mA max) - using last known level: %d%%", 
-                                 use_current, initial_level_on_charge);
-                    }
-                } else {
-                    // Low charge current: battery is likely nearly full
-                    initial_level_on_charge = (last_known_level >= 0 && last_known_level > 70) ? last_known_level : 70;
-                    ESP_LOGI(TAG, "Low charge current (%.1f mA max) - battery likely nearly full: %d%%", 
-                             use_current, initial_level_on_charge);
-                }
-                
-                // LOCK: Transition to CHG_ACTIVE - NEVER change initial_level_on_charge again
-                charge_state = CHG_ACTIVE;
-                last_charge_update_time_ms = now_ms;
-                ESP_LOGI(TAG, "Charge init done: maxI=%.1f mA, initial=%d%%, START_DETECT -> ACTIVE", 
-                         use_current, initial_level_on_charge);
-            }
-        }
-    }
-    
-    if (charge_state == CHG_ACTIVE) {
-        // Coulomb Counting - only current integration, NO recalculations
-        float abs_charge_current = -current_ma;
-        
-        if (initial_level_on_charge >= 0) {
-            float dt_hours = (float)(now_ms - last_charge_update_time_ms) / 3600000.0f;
-            if (dt_hours < 0.0f) dt_hours = 0.0f;  // Protection against negative time
-            
-            float charge_current_ma = abs_charge_current;
-            
-            // Add charged capacity: Q = I * t
-            charged_mah += charge_current_ma * dt_hours;
-            
-            // Calculate level: Level = Initial + (Charged / Capacity) * 100
-            const float battery_capacity_mah = 2000.0f;
-            float level_percent = initial_level_on_charge + (charged_mah / battery_capacity_mah) * 100.0f;
-            
-            status->level = (int)level_percent;
+            // Linear interpolation: (voltage - 3000) / (4200 - 3000) * 100
+            status->level = (int)((single_cell_mv - 3000.0f) * 100.0f / 1200.0f);
             if (status->level < 0) status->level = 0;
-            if (status->level > 100) status->level = 100;  // FIXED: 100 instead of 77
-            
-            // Update last known level
-            last_known_level = status->level;
-            
-            // Save to NVS periodically (every 10 seconds) or on significant change
-            if ((now_ms - last_save_time_ms) >= 10000) {
-                save_battery_level_to_nvs(status->level);
-                last_save_time_ms = now_ms;
-            }
-            
-            // Log periodically for debugging
-            static uint32_t last_charge_log = 0;
-            if ((now_ms - last_charge_log) >= 5000) {
-                ESP_LOGI(TAG, "Charging: current=%.1f mA, charged=%.2f mAh, level=%d%%", 
-                         charge_current_ma, charged_mah, status->level);
-                last_charge_log = now_ms;
-            }
+            if (status->level > 100) status->level = 100;
         }
         
-        last_charge_update_time_ms = now_ms;
-    }
-    
-    // Exit from charging
-    if (!charging_now && was_charging) {
-        // Charging stopped
-        if (charge_state == CHG_ACTIVE && status->level >= 0) {
-            // Save final level to NVS
+        // Update last known level
+        last_known_level = status->level;
+        
+        // Save level to NVS periodically
+        uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+        if ((now_ms - last_save_time_ms) >= 10000) {  // Every 10 seconds
             save_battery_level_to_nvs(status->level);
-            ESP_LOGI(TAG, "Charging stopped, final level: %d%%, ACTIVE -> IDLE", status->level);
-        } else if (charge_state == CHG_START_DETECT) {
-            ESP_LOGI(TAG, "Charging stopped, START_DETECT -> IDLE");
+            last_save_time_ms = now_ms;
         }
-        charge_state = CHG_IDLE;
-        charged_mah = 0.0f;
-        initial_level_on_charge = -1;
-        last_charge_update_time_ms = 0;
-        chg_max_current_ma = 0.0f;  // Reset maximum
-    }
-    
-    was_charging = charging_now;
-    
-    // Handle discharging (only if not charging)
-    if (!charging_now && ((!usb_present && current_ma > 1.0f) || (usb_present && current_ma > 10.0f))) {
-        // Discharging: use coulomb counting
-        // Without USB: track even small currents (1-5mA for self-discharge and idle consumption)
-        // With USB: only track significant discharge (> 10mA, USB power output)
-        // Tab5 battery: NP-F550, 2000mAh capacity
-        
-        // Reset charge tracking when discharging starts
-        if (charge_state != CHG_IDLE) {
-            charge_state = CHG_IDLE;
-            charged_mah = 0.0f;
-            initial_level_on_charge = -1;
-            ESP_LOGI(TAG, "Discharge started, reset charge tracking");
-        }
-        
-        // Initialize discharge tracking if this is the first discharge reading
-        if (initial_level_on_discharge < 0) {
-            // Use last known level from charging as starting point
-            initial_level_on_discharge = (last_known_level >= 0) ? last_known_level : 75;
-            discharged_mah = 0.0f;
-            last_discharge_update_time_ms = now_ms;
-            ESP_LOGI(TAG, "Discharge started (USB=%d, current=%.1f mA), initial level: %d%%", 
-                     usb_present ? 1 : 0, current_ma, initial_level_on_discharge);
-        }
-        
-        // Integrate discharge current over time
-        if (last_discharge_update_time_ms > 0) {
-            float dt_hours = (float)(now_ms - last_discharge_update_time_ms) / 3600000.0f;  // Convert ms to hours
-            float discharge_current_ma = current_ma;  // Positive current = discharging
-            
-            // Add discharged capacity: Q = I * t
-            discharged_mah += discharge_current_ma * dt_hours;
-            
-            // Calculate level: Level = Initial - (Discharged / Capacity) * 100
-            // Tab5 battery capacity: 2000mAh
-            const float battery_capacity_mah = 2000.0f;
-            float level_percent = initial_level_on_discharge - (discharged_mah / battery_capacity_mah) * 100.0f;
-            
-            status->level = (int)level_percent;
-            if (status->level < 0) status->level = 0;
-            if (status->level > 100) status->level = 100;  // FIXED: 100 instead of 77
-            
-            // Update last known level
-            last_known_level = status->level;
-            
-            // Save to NVS periodically (every 10 seconds) or on significant change
-            if ((now_ms - last_save_time_ms) >= 10000) {
-                save_battery_level_to_nvs(status->level);
-                last_save_time_ms = now_ms;
+    } else {
+        // Voltage is VSYS (< 3V) - use last known level from NVS
+        if (!level_loaded_from_nvs) {
+            int nvs_level = load_battery_level_from_nvs();
+            if (nvs_level >= 0) {
+                last_known_level = nvs_level;
+                ESP_LOGI(TAG, "Loaded battery level from NVS: %d%%", last_known_level);
+            } else {
+                last_known_level = 75;  // Default
+                ESP_LOGI(TAG, "No battery level in NVS, using default: %d%%", last_known_level);
             }
-            
-            // Log periodically for debugging
-            static uint32_t last_discharge_log = 0;
-            if ((now_ms - last_discharge_log) >= 5000) {  // Every 5 seconds
-                ESP_LOGI(TAG, "Discharging: current=%.1f mA, discharged=%.2f mAh, level=%d%%", 
-                         discharge_current_ma, discharged_mah, status->level);
-                last_discharge_log = now_ms;
-            }
-        } else {
-            // First reading, use initial level
-            status->level = initial_level_on_discharge;
+            level_loaded_from_nvs = true;
         }
         
-        last_discharge_update_time_ms = now_ms;
+        status->level = last_known_level;
         
-    } else if (!charging_now && !usb_present) {
-        // USB disconnected, no significant current: use last known level
-        // Reset discharge and charge tracking
-        if (charge_state != CHG_IDLE) {
-            charge_state = CHG_IDLE;
-            charged_mah = 0.0f;
-            initial_level_on_charge = -1;
-        }
-        
-        if (last_known_level >= 0) {
-            status->level = last_known_level;
-        } else {
-            status->level = 75;  // Default
-            last_known_level = 75;
-            save_battery_level_to_nvs(last_known_level);  // Save default
-        }
-        
-    } else if (!charging_now) {
-        // USB connected but idle (very small current, |current| <= 10mA): use last known level
-        status->level = (last_known_level >= 0) ? last_known_level : 75;
-    }
-    
-    // If voltage was invalid (VSYS), estimate from battery level
-    // Calibration: Level 76.5% = 8.122V = 100% real charge (charging stops at this level)
-    // User observation: 76-77% displayed = 100% real charge, voltage 8.122V
-    if (status->voltage_mv < 0 && status->level >= 0) {
-        // Estimate battery voltage from level
-        // Calibration point: 76.5% = 8.122V (100% real charge)
-        // Linear interpolation: V = 6.0V (0%) to 8.122V (76.5% = 100% real)
+        // Estimate voltage from level (for display)
         float level_f = (float)status->level;
         float estimated_voltage_v;
-        
         if (level_f <= 76.5f) {
-            // Below calibration point: linear from 6.0V to 8.122V
             estimated_voltage_v = 6.0f + (level_f / 76.5f) * 2.122f;
         } else {
-            // Above calibration point: remains 8.122V (charging stops, max voltage)
             estimated_voltage_v = 8.122f;
         }
-        
         status->voltage_mv = (int)(estimated_voltage_v * 1000.0f);
     }
     
@@ -1109,3 +631,4 @@ esp_err_t battery_monitor_get_shunt_voltage_uv(int *out_uv)
     *out_uv = (int)(shunt_raw * 2.5f);
     return ESP_OK;
 }
+
