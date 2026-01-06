@@ -1,15 +1,81 @@
+# USB Gamepad Display Test for M5Stack Tab5
+
+Visual USB gamepad test with real-time on-screen display.
+
+## Features
+
+- Real-time gamepad state visualization on Tab5 display
+- Button states (green when pressed, gray when released)
+- Analog stick positions (visual circles with crosshair)
+- Trigger values (progress bars)
+- D-Pad direction display
+- Gamepad VID/PID information
+- Supports DualSense (PS5) and generic USB HID gamepads
+
+## Building
+
+```bash
+cd /Users/a15/A_AI_Project/cardputer/tab5/tests/usb_gamepad_display_test
+export IDF_PATH=/Users/a15/A_AI_Project/esp-idf-official
+source $IDF_PATH/export.sh
+idf.py build
+```
+
+## Flashing
+
+```bash
+idf.py -p /dev/cu.usbmodem1434301 flash
+```
+
+## Monitoring
+
+```bash
+idf.py -p /dev/cu.usbmodem1434301 monitor
+```
+
+## Usage
+
+1. Flash the firmware to your Tab5
+2. Connect USB gamepad to USB-A port on Tab5
+3. Display will show:
+   - Gamepad information (VID, PID)
+   - Button states (A, B, X, Y, LB, RB, BACK, START, L3, R3, HOME)
+   - Stick positions (left and right)
+   - Trigger bars (L2 and R2)
+   - D-Pad direction
+
+## Display Layout
+
+- **Top**: Title and gamepad VID/PID
+- **Buttons**: 3 rows of buttons (A/B/X/Y, LB/RB/BACK/START, L3/R3/HOME)
+- **D-Pad**: Current direction text
+- **Sticks**: Visual circles showing stick positions
+- **Triggers**: Progress bars with numeric values
+
+## Supported Gamepads
+
+- PlayStation 5 DualSense (VID: 0x054C, PID: 0x0CE6) - Full support
+- Generic USB HID gamepads - Basic support
+
+## Notes
+
+- Display updates at ~20 FPS
+- Button states are shown in real-time
+- Sticks show position relative to center
+- Triggers show analog values (0-255)
+=======
 # M5Stack Cardputer-Adv Tests
 
-**Repository:** Collection of test sketches for M5Stack Cardputer-Adv and Tab5  
+**Repository:** Collection of test sketches for M5Stack Cardputer-Adv  
 **Author:** AndyAiCardputer  
 **License:** MIT  
-**Last Updated:** January 4, 2026
+**Last Updated:** November 28, 2025
 
 ---
 
 ## 📋 Overview
 
-This repository contains working test sketches for various M5Stack units and components compatible with **M5Stack Cardputer-Adv** (ESP32-S3) and **M5Stack Tab5** (ESP32-P4).
+This repository contains working test sketches for various M5Stack units and components compatible with **M5Stack Cardputer-Adv** (ESP32-S3).
 
 All tests are tested and working. Each test includes:
 - ✅ Complete source code
@@ -21,9 +87,7 @@ All tests are tested and working. Each test includes:
 
 ## 🧪 Available Tests
 
-### Cardputer-Adv Tests (Arduino/PlatformIO)
-
-#### 1. M5Unit-Scroll Test
+### 1. M5Unit-Scroll Test
 **Location:** `tests/m5unit-scroll/`  
 **Status:** ✅ **Working perfectly!**
 
@@ -47,7 +111,7 @@ Test for M5Unit-Scroll encoder/scroll module with external ILI9488 display.
 
 ---
 
-#### 2. I2C Keyboard Test (CardKeyBoard)
+### 2. I2C Keyboard Test (CardKeyBoard)
 **Location:** `tests/i2c-keyboard/`  
 **Status:** ✅ **Working perfectly!**
 
@@ -72,95 +136,18 @@ Python-like terminal with external I2C keyboard (CardKeyBoard) support on extern
 
 ---
 
-#### 3. PA Hub Test (External Display)
-**Location:** `tests/pahub_test_external_display/`  
-**Status:** ✅ **Working**
-
-Test application for PA Hub (PCA9548A) with joystick, scroll encoders, and keyboard on external ILI9488 display.
-
-**Connected Devices:**
-- PA Hub (PCA9548A) - Address 0x70
-  - Channel 0: Joystick2 (0x63)
-  - Channel 1: Scroll Button A (0x40)
-  - Channel 2: Scroll Button B (0x40)
-  - Channel 3: CardKeyBoard (0x5F)
-
----
-
-#### 4. PA Hub Test v1.1
-**Location:** `tests/pahub_test_v1.1/`  
-**Status:** ✅ **Working**
-
-Alternative PA Hub test implementation.
-
----
-
-### Tab5 Tests (ESP-IDF)
-
-#### 5. USB Gamepad Display Test
-**Location:** `tests/usb_gamepad_display_test/`  
-**Status:** ✅ **Working**
-
-Visual USB gamepad test with real-time on-screen display for M5Stack Tab5.
-
-**Features:**
-- Real-time gamepad state visualization on Tab5 display
-- Button states (green when pressed, gray when released)
-- Analog stick positions (visual circles with crosshair)
-- Trigger values (progress bars)
-- D-Pad direction display
-- Supports DualSense (PS5) and generic USB HID gamepads
-
-**Hardware:**
-- M5Stack Tab5 (ESP32-P4)
-- USB-A port for gamepad connection
-- MIPI DSI display (ST7123 controller, 720×1280)
-
----
-
-#### 6. Tab5 Battery Charger Test
-**Location:** `tests/tab5_battery_charger_test/`  
-**Status:** ✅ **Working**
-
-Battery monitoring and charging test application for M5Stack Tab5 with real-time telemetry display.
-
-**Features:**
-- Real-time battery voltage monitoring (INA226)
-- Current measurement (charging/discharging) with signed values
-- **Coulomb Counting** for accurate battery level tracking
-- Battery level calculation (0-100%) based on current integration
-- Battery presence detection (two-threshold classifier with hysteresis)
-- USB-C connection detection
-- Charging status display
-- Visual battery icon with fill level
-- Automatic charging enable
-- Voltage estimation from battery level (INA226 measures VSYS, not VBAT)
-
-**Hardware:**
-- M5Stack Tab5 (ESP32-P4)
-- Battery: 2S Li-Po (NP-F550, 7.4V nominal, 6.0V empty, 8.4V full)
-- Monitor: INA226 @ I2C 0x41
-- Charger: IP2326 (managed automatically)
-- Display: ST7123 720×1280 portrait
-
-**Documentation:**
-- [Test README](tests/tab5_battery_charger_test/README.md)
-
----
-
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - **Hardware:**
-  - M5Stack Cardputer-Adv or Tab5
+  - M5Stack Cardputer-Adv
   - USB-C cable
   - Test module (M5Unit-Scroll, CardKeyBoard, etc.)
   - External ILI9488 display (optional, for display tests)
 
 - **Software:**
-  - **For Cardputer-Adv:** Arduino IDE 2.0+ or PlatformIO
-  - **For Tab5:** ESP-IDF v5.0+
+  - Arduino IDE 2.0+ or PlatformIO
   - M5Stack libraries:
     - `M5Cardputer` (for Cardputer-Adv)
     - `M5Unified`
@@ -174,24 +161,25 @@ Battery monitoring and charging test application for M5Stack Tab5 with real-time
    cd cardputer-adv-tests
    ```
 
-2. **For Cardputer-Adv tests:**
+2. **Install required libraries:**
    - Open Arduino IDE
    - Go to **Tools → Manage Libraries**
    - Search and install:
      - `M5Cardputer`
      - `M5Unified`
      - `M5GFX`
-   - Select board: **Tools → Board → M5Stack Cardputer-Adv**
-   - Open test sketch and upload
 
-3. **For Tab5 tests (ESP-IDF):**
-   ```bash
-   export IDF_PATH=/path/to/esp-idf
-   source $IDF_PATH/export.sh
-   cd tests/tab5_battery_charger_test
-   idf.py build
-   idf.py -p /dev/cu.usbmodemXXXXX flash monitor
-   ```
+3. **Select board:**
+   - **Tools → Board → M5Stack Cardputer-Adv**
+
+4. **Open test sketch:**
+   - Navigate to `tests/m5unit-scroll/`
+   - Open `unitscroll_test_external_display.ino`
+
+5. **Upload and test:**
+   - Connect Cardputer-Adv via USB-C
+   - Click **Upload**
+   - Open Serial Monitor (115200 baud)
 
 ---
 
@@ -337,4 +325,6 @@ Found a bug or want to add a test? Feel free to:
 
 **Made with ❤️ by AndyAiCardputer**
 
-**Last Updated:** January 4, 2026
+**Last Updated:** November 28, 2025
+>>>>>>> ae385f652a99408b9efa63b99fcf5d48379cd28e
+
