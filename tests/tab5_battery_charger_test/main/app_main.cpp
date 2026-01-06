@@ -183,8 +183,8 @@ static void draw_char(int x, int y, char c, uint16_t color, int scale) {
     for (int py = 0; py < 8; py++) {
         uint8_t row = char_data[py];
         for (int px = 0; px < 8; px++) {
-            // ИСПРАВЛЕНО: читаем биты справа налево (как в NES эмуляторе) для правильной ориентации
-            if (row & (1 << px)) {  // Было: (1 << (7 - px)) - это вызывало зеркальность
+            // FIXED: read bits right-to-left (as in NES emulator) for correct orientation
+            if (row & (1 << px)) {  // Was: (1 << (7 - px)) - this caused mirroring
                 // Draw scaled pixel
                 for (int sy = 0; sy < scale; sy++) {
                     for (int sx = 0; sx < scale; sx++) {
@@ -301,19 +301,12 @@ static void update_display(battery_status_t* status, float current_ma, bool usb_
     draw_string(50, y_pos, current_str, COLOR_YELLOW, scale);
     y_pos += line_height;
     
-    // Battery percentage (use level from battery_monitor_read, calculated from charging current)
-    // Scale internal level (0-77%) to displayed level (0-100%)
-    // 77% internal = 100% displayed (real full charge at 8.122V)
+    // Battery percentage (use level from battery_monitor_read, now 0-100%)
     int percent = status->level;
-    if (percent >= 0) {
-        // Scale: displayed = (internal * 100) / 77
-        // Example: 77% internal → 100% displayed, 38.5% internal → 50% displayed
-        percent = (percent * 100) / 77;
-        if (percent > 100) percent = 100;  // Safety limit
-    }
     if (percent < 0) {
         snprintf(buf, sizeof(buf), "Level: N/A");
     } else {
+        if (percent > 100) percent = 100;  // Safety limit
         snprintf(buf, sizeof(buf), "Level: %d%%", percent);
     }
     draw_string(50, y_pos, buf, COLOR_GREEN, scale);

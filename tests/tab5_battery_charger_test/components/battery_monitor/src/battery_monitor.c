@@ -8,6 +8,8 @@
 #include "driver/i2c_master.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 #include <math.h>
 
 // Forward declaration for USB-C detection (to avoid including full BSP header)
@@ -34,6 +36,12 @@ typedef enum {
     BAT_UNKNOWN
 } battery_state_t;
 
+typedef enum {
+    CHG_IDLE,              // not charging
+    CHG_START_DETECT,      // charging just started, analyzing current
+    CHG_ACTIVE             // charging active, coulomb counting active
+} charge_state_t;
+
 #define V_LOW_THRESHOLD_MV  5800   // mV - below this = LOW (USB/no battery)
 #define V_HIGH_THRESHOLD_MV 7200   // mV - above this = HIGH (battery present)
 #define WINDOW_SIZE          20     // 20 samples ~2s at 10Hz (100ms updates)
@@ -50,14 +58,18 @@ static battery_state_t cached_battery_state = BAT_UNKNOWN;
 // Coulomb counting for discharge tracking
 static float discharged_mah = 0.0f;  // Accumulated discharged capacity in mAh
 static int initial_level_on_discharge = -1;  // Battery level when discharge started
-static uint32_t last_update_time_ms = 0;  // Last time we updated the integration
+static uint32_t last_discharge_update_time_ms = 0;  // Last time we updated discharge integration
 static bool was_charging = false;  // Track if we were charging in previous call
 
-// Coulomb counting for charge tracking
+// Coulomb counting for charge tracking - State Machine approach
+static charge_state_t charge_state = CHG_IDLE;
 static float charged_mah = 0.0f;  // Accumulated charged capacity in mAh
-static int initial_level_on_charge = -1;  // Battery level when charge started
+static int initial_level_on_charge = -1;  // Battery level when charge started (fixed after CHG_START_DETECT)
 static uint32_t last_charge_update_time_ms = 0;  // Last time we updated charge integration
-static bool charge_tracking_active = false;  // Track if we're actively tracking charge
+static float last_charge_current = 0.0f;  // Previous charge current for rapid increase detection
+static uint32_t charge_start_time_ms = 0;  // When charging started
+static float chg_max_current_ma = 0.0f;  // Maximum current during START_DETECT window
+static bool charging_latched = false;  // Hysteresis to prevent flapping
 
 // INA226 registers
 #define INA226_REG_CONFIG      0x00
@@ -319,6 +331,66 @@ static void dump_ina226_registers(void) {
     } else {
         ESP_LOGI(TAG, "  CURRENT: LSB not set!");
     }
+}
+
+// NVS namespace and key for battery level storage
+#define NVS_NAMESPACE "battery"
+#define NVS_KEY_LEVEL "level"
+
+// Load battery level from NVS
+static int load_battery_level_from_nvs(void)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to open NVS namespace '%s': %s", NVS_NAMESPACE, esp_err_to_name(err));
+        return -1;
+    }
+    
+    int32_t level = -1;
+    err = nvs_get_i32(nvs_handle, NVS_KEY_LEVEL, &level);
+    nvs_close(nvs_handle);
+    
+    if (err == ESP_OK && level >= 0 && level <= 100) {
+        ESP_LOGI(TAG, "Loaded battery level from NVS: %d%%", level);
+        return (int)level;
+    } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGI(TAG, "No battery level found in NVS, using default");
+    } else {
+        ESP_LOGW(TAG, "Failed to read battery level from NVS: %s", esp_err_to_name(err));
+    }
+    
+    return -1;
+}
+
+// Save battery level to NVS
+static esp_err_t save_battery_level_to_nvs(int level)
+{
+    if (level < 0 || level > 100) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to open NVS namespace '%s': %s", NVS_NAMESPACE, esp_err_to_name(err));
+        return err;
+    }
+    
+    err = nvs_set_i32(nvs_handle, NVS_KEY_LEVEL, (int32_t)level);
+    if (err == ESP_OK) {
+        err = nvs_commit(nvs_handle);
+        if (err == ESP_OK) {
+            ESP_LOGD(TAG, "Saved battery level to NVS: %d%%", level);
+        } else {
+            ESP_LOGW(TAG, "Failed to commit NVS: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGW(TAG, "Failed to set battery level in NVS: %s", esp_err_to_name(err));
+    }
+    
+    nvs_close(nvs_handle);
+    return err;
 }
 
 esp_err_t battery_monitor_init(i2c_master_bus_handle_t i2c_bus_handle)
@@ -665,97 +737,229 @@ esp_err_t battery_monitor_read(battery_status_t *status)
     
     // Estimate battery level based on charging/discharging behavior
     // Static variable to store last known battery level
-    static int last_known_level = 75;  // Default to 75% if no previous data
+    // Load from NVS on first call, then use cached value
+    static int last_known_level = -1;  // -1 = not loaded yet
+    static bool level_loaded_from_nvs = false;
+    static uint32_t last_save_time_ms = 0;
+    
+    // Load level from NVS on first call
+    if (!level_loaded_from_nvs) {
+        int nvs_level = load_battery_level_from_nvs();
+        if (nvs_level >= 0) {
+            last_known_level = nvs_level;
+            ESP_LOGI(TAG, "Loaded battery level from NVS: %d%%", last_known_level);
+        } else {
+            last_known_level = 75;  // Default if not found in NVS
+            ESP_LOGI(TAG, "No battery level in NVS, using default: %d%%", last_known_level);
+        }
+        level_loaded_from_nvs = true;
+    }
     
     // Get current time for integration
     uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
     
-    if (usb_present && current_ma < -10.0f) {
-        // Charging: use coulomb counting for accurate level tracking
-        // Tab5 battery: NP-F550, 2000mAh capacity
+    // Detect charging state with hysteresis (edge detection) - based on current, not USB!
+    // Hysteresis: enter charging < -20mA, exit charging > -5mA
+    if (!charging_latched) {
+        charging_latched = (current_ma < -20.0f);  // Enter: stricter threshold
+    } else {
+        charging_latched = (current_ma < -5.0f);   // Exit: softer threshold
+    }
+    bool charging_now = charging_latched;
+    
+    if (charging_now && !was_charging) {
+        // Edge: charging just started
+        charge_state = CHG_START_DETECT;
+        charge_start_time_ms = now_ms;
+        last_charge_current = 0.0f;
+        chg_max_current_ma = 0.0f;  // Reset maximum for new window
+        charged_mah = 0.0f;
+        initial_level_on_charge = -1;
         
-        float abs_charge_current = -current_ma;  // Make positive
+        // Reset discharge tracking
+        discharged_mah = 0.0f;
+        initial_level_on_discharge = -1;
         
-        // Reset discharge tracking when charging starts
-        if (!was_charging) {
-            discharged_mah = 0.0f;
-            initial_level_on_discharge = -1;
-            ESP_LOGI(TAG, "Charging started, reset discharge tracking");
-        }
-        
-        // Initialize charge tracking if this is the first charge reading
-        if (!charge_tracking_active || initial_level_on_charge < 0) {
-            // Use last known level as starting point
-            initial_level_on_charge = (last_known_level > 0) ? last_known_level : 75;
+        ESP_LOGI(TAG, "Charging started: IDLE -> START_DETECT");
+    }
+    
+    if (charge_state == CHG_START_DETECT) {
+        // Check: if charging stopped before window completion - exit gracefully
+        if (!charging_now) {
+            charge_state = CHG_IDLE;
+            initial_level_on_charge = -1;
             charged_mah = 0.0f;
-            last_charge_update_time_ms = now_ms;
-            charge_tracking_active = true;
-            ESP_LOGI(TAG, "Charge tracking started, initial level: %d%%", initial_level_on_charge);
+            chg_max_current_ma = 0.0f;
+            ESP_LOGI(TAG, "Charging stopped early: START_DETECT -> IDLE");
+        } else {
+            // Collect maximum current in ~1.5 second window
+            float abs_charge_current = -current_ma;
+            
+            // Update maximum current
+            if (abs_charge_current > chg_max_current_ma) {
+                chg_max_current_ma = abs_charge_current;
+            }
+            
+            // Optional: log rapid increase (for debugging)
+            if (last_charge_current > 0.0f) {
+                float current_increase = abs_charge_current - last_charge_current;
+                uint32_t time_since_start = now_ms - charge_start_time_ms;
+                if (current_increase > 200.0f && time_since_start < 5000) {
+                    ESP_LOGW(TAG, "Rapid current increase detected: %.1f -> %.1f mA (%.1f mA increase)", 
+                             last_charge_current, abs_charge_current, current_increase);
+                }
+            }
+            
+            // CRITICAL: update every tick for next iteration
+            last_charge_current = abs_charge_current;
+            
+            // Wait ~1.5 seconds to see maximum startup current
+            if ((now_ms - charge_start_time_ms) >= 1500) {
+                // Use maximum current in window to determine initial level
+                float use_current = chg_max_current_ma;
+                
+                // Determine initial level based on MAXIMUM charging current in window
+                if (use_current > 600.0f) {
+                    // Very high charge current: battery is likely discharged
+                    // More realistic thresholds:
+                    // 850+ mA = 0% (fully discharged)
+                    // 800-850 mA = 0-5% (very low charge)
+                    // 700-800 mA = 5-15% (low charge)
+                    // 600-700 mA = 15-25% (partially discharged)
+                    float estimated_level;
+                    if (use_current > 850.0f) {
+                        // Very high current (>850mA): battery fully discharged
+                        estimated_level = 0.0f;
+                    } else if (use_current > 800.0f) {
+                        // High current (800-850mA): very low charge, 0-5%
+                        estimated_level = ((850.0f - use_current) / 50.0f) * 5.0f;
+                    } else if (use_current > 700.0f) {
+                        // Medium-high current (700-800mA): low charge, 5-15%
+                        estimated_level = 5.0f + ((800.0f - use_current) / 100.0f) * 10.0f;
+                    } else {
+                        // Medium current (600-700mA): partially discharged, 15-25%
+                        estimated_level = 15.0f + ((700.0f - use_current) / 100.0f) * 10.0f;
+                    }
+                    initial_level_on_charge = (int)estimated_level;
+                    ESP_LOGW(TAG, "High charge current (%.1f mA max) detected - starting from %d%%", 
+                             use_current, initial_level_on_charge);
+                } else if (use_current > 300.0f) {
+                    // Medium charge current: use last known level, but be conservative if it's 0%
+                    if (last_known_level == 0) {
+                        // If NVS had 0% but current is medium, battery may be higher
+                        initial_level_on_charge = 20;  // Conservative estimate for medium current
+                        ESP_LOGI(TAG, "Medium charge current (%.1f mA max) with 0%% in NVS - using conservative estimate: %d%%", 
+                                 use_current, initial_level_on_charge);
+                    } else {
+                        initial_level_on_charge = (last_known_level >= 0) ? last_known_level : 50;
+                        ESP_LOGI(TAG, "Medium charge current (%.1f mA max) - using last known level: %d%%", 
+                                 use_current, initial_level_on_charge);
+                    }
+                } else {
+                    // Low charge current: battery is likely nearly full
+                    initial_level_on_charge = (last_known_level >= 0 && last_known_level > 70) ? last_known_level : 70;
+                    ESP_LOGI(TAG, "Low charge current (%.1f mA max) - battery likely nearly full: %d%%", 
+                             use_current, initial_level_on_charge);
+                }
+                
+                // LOCK: Transition to CHG_ACTIVE - NEVER change initial_level_on_charge again
+                charge_state = CHG_ACTIVE;
+                last_charge_update_time_ms = now_ms;
+                ESP_LOGI(TAG, "Charge init done: maxI=%.1f mA, initial=%d%%, START_DETECT -> ACTIVE", 
+                         use_current, initial_level_on_charge);
+            }
         }
+    }
+    
+    if (charge_state == CHG_ACTIVE) {
+        // Coulomb Counting - only current integration, NO recalculations
+        float abs_charge_current = -current_ma;
         
-        // Integrate charge current over time
-        if (last_charge_update_time_ms > 0) {
-            float dt_hours = (float)(now_ms - last_charge_update_time_ms) / 3600000.0f;  // Convert ms to hours
-            float charge_current_ma = abs_charge_current;  // Positive current = charging
+        if (initial_level_on_charge >= 0) {
+            float dt_hours = (float)(now_ms - last_charge_update_time_ms) / 3600000.0f;
+            if (dt_hours < 0.0f) dt_hours = 0.0f;  // Protection against negative time
+            
+            float charge_current_ma = abs_charge_current;
             
             // Add charged capacity: Q = I * t
-            // Note: This is the NET charge current into battery (after load is subtracted)
             charged_mah += charge_current_ma * dt_hours;
             
             // Calculate level: Level = Initial + (Charged / Capacity) * 100
-            // Tab5 battery capacity: 2000mAh
             const float battery_capacity_mah = 2000.0f;
             float level_percent = initial_level_on_charge + (charged_mah / battery_capacity_mah) * 100.0f;
             
             status->level = (int)level_percent;
             if (status->level < 0) status->level = 0;
-            if (status->level > 77) status->level = 77;  // Max 77% = 100% real charge (8.122V, charging stops)
+            if (status->level > 100) status->level = 100;  // FIXED: 100 instead of 77
             
             // Update last known level
             last_known_level = status->level;
             
+            // Save to NVS periodically (every 10 seconds) or on significant change
+            if ((now_ms - last_save_time_ms) >= 10000) {
+                save_battery_level_to_nvs(status->level);
+                last_save_time_ms = now_ms;
+            }
+            
             // Log periodically for debugging
             static uint32_t last_charge_log = 0;
-            if ((now_ms - last_charge_log) >= 5000) {  // Every 5 seconds
+            if ((now_ms - last_charge_log) >= 5000) {
                 ESP_LOGI(TAG, "Charging: current=%.1f mA, charged=%.2f mAh, level=%d%%", 
                          charge_current_ma, charged_mah, status->level);
                 last_charge_log = now_ms;
             }
-        } else {
-            // First reading, use initial level
-            status->level = initial_level_on_charge;
         }
         
         last_charge_update_time_ms = now_ms;
-        was_charging = true;
-        
-    } else if ((!usb_present && current_ma > 1.0f) || (usb_present && current_ma > 10.0f)) {
+    }
+    
+    // Exit from charging
+    if (!charging_now && was_charging) {
+        // Charging stopped
+        if (charge_state == CHG_ACTIVE && status->level >= 0) {
+            // Save final level to NVS
+            save_battery_level_to_nvs(status->level);
+            ESP_LOGI(TAG, "Charging stopped, final level: %d%%, ACTIVE -> IDLE", status->level);
+        } else if (charge_state == CHG_START_DETECT) {
+            ESP_LOGI(TAG, "Charging stopped, START_DETECT -> IDLE");
+        }
+        charge_state = CHG_IDLE;
+        charged_mah = 0.0f;
+        initial_level_on_charge = -1;
+        last_charge_update_time_ms = 0;
+        chg_max_current_ma = 0.0f;  // Reset maximum
+    }
+    
+    was_charging = charging_now;
+    
+    // Handle discharging (only if not charging)
+    if (!charging_now && ((!usb_present && current_ma > 1.0f) || (usb_present && current_ma > 10.0f))) {
         // Discharging: use coulomb counting
         // Without USB: track even small currents (1-5mA for self-discharge and idle consumption)
         // With USB: only track significant discharge (> 10mA, USB power output)
         // Tab5 battery: NP-F550, 2000mAh capacity
         
         // Reset charge tracking when discharging starts
-        if (charge_tracking_active) {
+        if (charge_state != CHG_IDLE) {
+            charge_state = CHG_IDLE;
             charged_mah = 0.0f;
             initial_level_on_charge = -1;
-            charge_tracking_active = false;
             ESP_LOGI(TAG, "Discharge started, reset charge tracking");
         }
         
         // Initialize discharge tracking if this is the first discharge reading
         if (initial_level_on_discharge < 0) {
             // Use last known level from charging as starting point
-            initial_level_on_discharge = (last_known_level > 0) ? last_known_level : 75;
+            initial_level_on_discharge = (last_known_level >= 0) ? last_known_level : 75;
             discharged_mah = 0.0f;
-            last_update_time_ms = now_ms;
+            last_discharge_update_time_ms = now_ms;
             ESP_LOGI(TAG, "Discharge started (USB=%d, current=%.1f mA), initial level: %d%%", 
                      usb_present ? 1 : 0, current_ma, initial_level_on_discharge);
         }
         
         // Integrate discharge current over time
-        if (last_update_time_ms > 0) {
-            float dt_hours = (float)(now_ms - last_update_time_ms) / 3600000.0f;  // Convert ms to hours
+        if (last_discharge_update_time_ms > 0) {
+            float dt_hours = (float)(now_ms - last_discharge_update_time_ms) / 3600000.0f;  // Convert ms to hours
             float discharge_current_ma = current_ma;  // Positive current = discharging
             
             // Add discharged capacity: Q = I * t
@@ -768,10 +972,16 @@ esp_err_t battery_monitor_read(battery_status_t *status)
             
             status->level = (int)level_percent;
             if (status->level < 0) status->level = 0;
-            if (status->level > 77) status->level = 77;  // Max 77% = 100% real charge (8.122V, charging stops)
+            if (status->level > 100) status->level = 100;  // FIXED: 100 instead of 77
             
             // Update last known level
             last_known_level = status->level;
+            
+            // Save to NVS periodically (every 10 seconds) or on significant change
+            if ((now_ms - last_save_time_ms) >= 10000) {
+                save_battery_level_to_nvs(status->level);
+                last_save_time_ms = now_ms;
+            }
             
             // Log periodically for debugging
             static uint32_t last_discharge_log = 0;
@@ -785,34 +995,28 @@ esp_err_t battery_monitor_read(battery_status_t *status)
             status->level = initial_level_on_discharge;
         }
         
-        last_update_time_ms = now_ms;
-        was_charging = false;
+        last_discharge_update_time_ms = now_ms;
         
-    } else if (!usb_present) {
+    } else if (!charging_now && !usb_present) {
         // USB disconnected, no significant current: use last known level
         // Reset discharge and charge tracking
-        if (was_charging) {
-            discharged_mah = 0.0f;
-            initial_level_on_discharge = -1;
-        }
-        if (charge_tracking_active) {
+        if (charge_state != CHG_IDLE) {
+            charge_state = CHG_IDLE;
             charged_mah = 0.0f;
             initial_level_on_charge = -1;
-            charge_tracking_active = false;
         }
         
-        if (last_known_level > 0) {
+        if (last_known_level >= 0) {
             status->level = last_known_level;
         } else {
             status->level = 75;  // Default
             last_known_level = 75;
+            save_battery_level_to_nvs(last_known_level);  // Save default
         }
-        was_charging = false;
         
-    } else {
+    } else if (!charging_now) {
         // USB connected but idle (very small current, |current| <= 10mA): use last known level
-        status->level = last_known_level;
-        was_charging = false;
+        status->level = (last_known_level >= 0) ? last_known_level : 75;
     }
     
     // If voltage was invalid (VSYS), estimate from battery level
@@ -905,4 +1109,3 @@ esp_err_t battery_monitor_get_shunt_voltage_uv(int *out_uv)
     *out_uv = (int)(shunt_raw * 2.5f);
     return ESP_OK;
 }
-
