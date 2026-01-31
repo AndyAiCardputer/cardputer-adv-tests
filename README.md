@@ -95,9 +95,37 @@ Alternative PA Hub test implementation.
 
 ---
 
+#### 5. NES Emulator - External Display ILI9341 (2.4")
+**Location:** `tests/nes_cardputer_adv_240/`  
+**Status:** ✅ **Working perfectly!**
+
+NES emulator for M5Stack Cardputer-Adv with external ILI9341 display (240×320, 2.4 inches).
+
+**Features:**
+- Single-core operation (no RTOS)
+- External ILI9341 display (240×320 pixels, 2.4 inches)
+- Shared SPI bus for SD card and display
+- ROM loading from SD card
+- Frame rendering (256×240 → 240×240, centered)
+- Keyboard input (WASD for directions, Enter/Space for A/B)
+- Joystick2 support (auto-detection, optional)
+- Audio working (22050 Hz, mono, double buffering)
+- Volume control (keys `-` and `=`)
+
+**Hardware:**
+- M5Stack Cardputer-Adv
+- ILI9341 external display (240×320, 2.4 inches)
+- SD card (FAT32 formatted)
+- M5Unit Joystick2 (optional)
+
+**Documentation:**
+- [Test README](tests/nes_cardputer_adv_240/README.md)
+
+---
+
 ### Tab5 Tests (ESP-IDF)
 
-#### 5. USB Gamepad Display Test
+#### 6. USB Gamepad Display Test
 **Location:** `tests/usb_gamepad_display_test/`  
 **Status:** ✅ **Working**
 
@@ -118,7 +146,7 @@ Visual USB gamepad test with real-time on-screen display for M5Stack Tab5.
 
 ---
 
-#### 6. Tab5 Battery Charger Test
+#### 7. Tab5 Battery Charger Test
 **Location:** `tests/tab5_battery_charger_test/`  
 **Status:** ✅ **Working**
 
