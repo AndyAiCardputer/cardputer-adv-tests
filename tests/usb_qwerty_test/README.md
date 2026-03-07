@@ -19,7 +19,7 @@ USB Host HID keyboard test for M5Stack Tab5 (ESP32-P4). Connects a standard USB 
 ## Building
 
 ```bash
-# Set up ESP-IDF v5.x
+# Set up ESP-IDF v6.1 (v5.x may also work)
 . $IDF_PATH/export.sh
 
 cd tests/usb_qwerty_test
@@ -34,5 +34,5 @@ See [USB_KEYBOARD_GUIDE.md](USB_KEYBOARD_GUIDE.md) for a detailed guide on how U
 ## Target
 
 - Chip: ESP32-P4
-- Framework: ESP-IDF v5.x
+- Framework: ESP-IDF v6.1 (v5.x may also work)
 - Display: 720x1280 MIPI DSI (landscape 1280x720)
